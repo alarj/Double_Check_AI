@@ -14,6 +14,8 @@ services:
       - ollama
     ports:
       - "8501:8501"
+    volumes:
+      - ./logic:/app  # ühendab serveri kausta konteineriga
     restart: always
 
 volumes:
