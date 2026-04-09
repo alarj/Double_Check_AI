@@ -95,6 +95,7 @@ response_container = st.empty()
 
 # --- TÖÖTLEMINE ---
 if submit_button and user_input:
+    # See plokk käivitub ainult siis, kui vajutati "Saada päring"
     with st.spinner(f"Töötan täisvõimsusel ({selected_threads} tuuma)..."):
         # 1. Turvakontroll
         guard_prompt = f"Vasta ainult LUBATUD või BLOKEERITUD: {user_input}"
@@ -103,27 +104,36 @@ if submit_button and user_input:
         if safety_result == "VIGA_TIMEOUT":
             st.session_state.last_response = "⌛ Serveri timeout."
             st.session_state.last_status = "VIGA"
+            log_to_file(user_input, "TIMEOUT", "Süsteem oli liiga aeglane")
+            
         elif safety_result == "VIGA_ÜHENDUS":
             st.session_state.last_response = "🔌 Sideviga serveriga."
             st.session_state.last_status = "VIGA"
+            
         elif "LUBATUD" in safety_result.upper():
             # 2. Põhivastus
             main_res = ask_ollama(MAIN_MODEL, user_input, selected_threads)
+            
             if "VIGA" in main_res:
-                st.session_state.last_response = main_res
+                st.session_state.last_response = f"Viga: {main_res}"
                 st.session_state.last_status = "VIGA"
+                log_to_file(user_input, "LUBATUD_AGA_VIGA", main_res)
             else:
+                # SALVESTAME VASTUSE SESSIOONI
                 st.session_state.last_response = main_res
                 st.session_state.last_status = "OK"
+                # KIRJUTAME LOGISSE (Nüüd on kindel, et main_res on olemas)
                 log_to_file(user_input, "LUBATUD", main_res)
         else:
             st.session_state.last_response = "🚨 BLOKEERITUD: Turvamooduli otsus."
             st.session_state.last_status = "BLOKEERITUD"
-            log_to_file(user_input, "BLOKEERITUD")
+            log_to_file(user_input, "BLOKEERITUD", "Turvamoodul sekkus")
 
-    # Vabastame lukud ja värskendame UI
+    # ALLES NÜÜD vabastame lukud
     st.session_state.processing = False
     st.rerun()
+
+
 
 # --- KUVAMINE ---
 if st.session_state.last_response:
