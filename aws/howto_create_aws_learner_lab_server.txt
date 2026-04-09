@@ -1,0 +1,44 @@
+JUHEND: AI-serveri püstitamine AWS-is
+
+See juhend aitab sul luua identse AI-turvakihi serveri (i4i.large, Docker, Ollama, Streamlit). Kogu protsess on automatiseeritud.
+
+1. samm: Logi sisse ja ava CloudShell
+
+Logi sisse oma AWS Learner Lab kontole.
+
+Vajuta üleval paremas nurgas (otsinguakna kõrval) ikoonile CloudShell (>_). See avab terminali brauseris.
+
+2. samm: Loo ja käivita paigaldusskript
+
+Kopeeri ja kleebi CloudShelli aknasse ükshaaval järgmised käsud:
+
+Loo skriptifail:
+
+Bash
+nano setup.sh
+Kleebi sisu: Nüüd kleebi sinna avatud aknasse skripti tekst failist setup_aws_ai.sh
+
+Salvesta ja välju: Vajuta klaviatuuril Ctrl + O, siis Enter ja lõpuks Ctrl + X.
+
+Käivita:
+
+Bash
+bash setup.sh
+
+3. samm: Pane kirja serveri aadress
+
+Skripti lõpus ilmub ekraanile sinu serveri Avalik IP (Public IP). Kopeeri see endale.
+Näide: 44.201.12.34
+
+4. samm: Ootamine ja testimine
+Server seadistab end nüüd taustal umbes 10–15 minutit (installib tarkvara ja laeb alla suured tehisintellekti mudelid).
+
+Kui aeg on möödas, ava brauseris järgmine aadress:
+http://SINU_IP_SIIN:8501
+
+⚠️ Olulised märkused:
+Võti (Key Pair): Skript eeldab, et sul on EC2 all loodud vähemalt üks Key Pair. Kui sul seda pole, loo see enne alustamist (EC2 -> Key Pairs -> Create).
+
+Kulu: Kasutatav serveri tüüp i4i.large on võimas ja kulutab labi krediiti kiiremini. Kui sa serverit ei kasuta, siis Stop või Terminate see EC2 konsoolis.
+
+Logid: Kui veebileht 15 min pärast ei avane, saad seisu kontrollida käsuga: tail -f /var/log/user-data.log (see näitab, mida server parajasti installeerib).
