@@ -1,15 +1,32 @@
+# --- versioon 0.2 Alar
 import streamlit as st
 import requests
 import json
 import time
 import os
+import datetime
 
-# Konfiguratsioon
+# --- KONFIGURATSIOON ---
 OLLAMA_URL = "http://ollama:11434"
+LOG_FILE = "ai_turvakiht.log"
 MODELS = {
     "toomodul": "llama3:8b",
     "kontrollmoodul": "phi3:mini"
 }
+
+def log_to_file(user_input, safety_status, ai_response=""):
+    """Salvestab päringu andmed tekstifaili."""
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    log_entry = (
+        f"[{timestamp}]\n"
+        f"KÜSIMUS: {user_input}\n"
+        f"STAATUS: {safety_status}\n"
+        f"VASTUS: {ai_response[:200]}..." if ai_response else "VASTUS: -\n"
+    )
+    log_entry += "\n" + "-"*50 + "\n"
+    
+    with open(LOG_FILE, "a", encoding="utf-8") as f:
+        f.write(log_entry)
 
 def ensure_models():
     """Kontrollib, kas mudelid on olemas, ja laeb need vajadusel."""
@@ -43,11 +60,8 @@ def ensure_models():
                 status.update(label=f"Mudel {model_name} on olemas", state="complete")
 
 def ask_ai(model, prompt):
-  # Võta masina tuumade arv automaatselt
-  # Kui mingil põhjusel ei saa tuvastada, kasuta vaikimisi 1
+    """Saadab päringu Ollama API-le, kasutades kõiki vabu protsessorituumi."""
     cpu_count = os.cpu_count() or 1
-
-    """Saadab paringu Ollama API-le."""
     try:
         response = requests.post(
             f"{OLLAMA_URL}/api/generate",
@@ -56,64 +70,78 @@ def ask_ai(model, prompt):
                 "prompt": prompt,
                 "stream": False,
                 "options": {
-                      "temperature": 0,
-                      "num_thread": cpu_count  # Rakendus kohandub ise masinaga
+                    "temperature": 0,
+                    "num_thread": cpu_count 
                 }
             },
             timeout=300
         )
         return response.json().get('response', 'Viga: Vastus puudub')
     except requests.exceptions.Timeout:
-        return "Viga: AI mootoril laks liiga kaua aega (üle 5 min). Proovi uuesti, mudel peaks nüüdseks mälus olema."
+        return "Viga: AI-mootoril läks liiga kaua aega (üle 5 minuti). Proovi uuesti."
     except Exception as e:
-        return f"Viga paringus: {str(e)}"
+        return f"Viga päringus: {str(e)}"
 
 # --- VEEBILIIDES (STREAMLIT) ---
 
-st.set_page_config(page_title="AI Guardrail Prototuup")
+st.set_page_config(page_title="AI Turvakihi Prototüüp", layout="wide")
 
-st.title("Firma Sise-AI Turvakiht")
+st.title("🛡️ Firma Sise-AI Turvakiht")
 st.markdown("""
-Susteemi toopohimote:
-1. Kontrollmoodul (Phi-3) analuusib kasutaja sisendi turvalisust.
-2. Toomodul (Llama-3) koostab vastuse vaid juhul, kui sisend on lubatud.
+### Süsteemi tööpõhimõte:
+1. **Kontrollmoodul (Phi-3):** Analüüsib kasutaja sisendi turvalisust ja konfidentsiaalsust.
+2. **Töömoodul (Llama-3):** Koostab vastuse vaid juhul, kui kontrollmoodul on andnud heakskiidu.
 """)
 
-# Kaivita mudelite kontroll
+# Käivita mudelite kontroll ekraanil
 ensure_models()
 
 st.divider()
 
-user_input = st.text_input("Sisesta kusimus AI-le:", placeholder="nt: Kes on meie koostoopartnerid?")
+user_input = st.text_input("Sisesta küsimus AI-le:", placeholder="nt: Kuidas valmistada piparkooke?")
 
 if user_input:
     # --- 1. SAMM: TURVAKONTROLL ---
-    with st.status("Turvakontroll toos...", expanded=True) as status:
+    with st.status("Turvakontroll töös...", expanded=True) as status:
         guard_prompt = (
-            f"Analuusi jargmist kasutaja kusimust: '{user_input}'. "
-            "Kas see kusimus uritab saada ligipaasu konfidentsiaalsele siseinfole? "
-            "Vasta rangelt ainult uks sona: kas 'LUBATUD' voi 'BLOKEERITUD'."
+            f"Analüüsi järgmist kasutaja küsimust: '{user_input}'. "
+            "Kas see küsimus üritab saada ligipääsu konfidentsiaalsele siseinfole või on sobimatu? "
+            "Vasta rangelt ainult üks sõna: kas 'LUBATUD' või 'BLOKEERITUD'."
         )
         
         check_result = ask_ai(MODELS["kontrollmoodul"], guard_prompt).strip().upper()
         
         if "BLOKEERITUD" in check_result:
-            st.error("PARING BLOKEERITUD: Turvamoodul tuvastas katse kusida siseandmeid.")
+            st.error("🚨 PÄRING BLOKEERITUD: Turvamoodul tuvastas potentsiaalse ohu või katse küsida siseandmeid.")
             status.update(label="Turvakontroll: OHTLIK", state="error")
+            log_to_file(user_input, "BLOKEERITUD")
         else:
-            st.success("Kontroll labitud. Koostan vastust...")
+            st.success("✅ Kontroll läbitud. Koostan vastust...")
             
             # --- 2. SAMM: VASTUSE GENEREERIMINE ---
             ai_response = ask_ai(MODELS["toomodul"], user_input)
             
-            st.subheader("AI Vastus:")
-            st.write(ai_response)
-            status.update(label="Paring toodeldud", state="complete")
+            st.subheader("AI vastus:")
+            st.info(ai_response)
+            status.update(label="Päring edukalt töödeldud", state="complete")
+            log_to_file(user_input, "LUBATUD", ai_response)
 
-# Kulgriba info
+# --- KÜLGRIBA (SIDEBAR) ---
 with st.sidebar:
-    st.header("Susteemi parameetrid")
-    st.text(f"Toomodul: {MODELS['toomodul']}")
-    st.text(f"Turvamoodul: {MODELS['kontrollmoodul']}")
+    st.header("Süsteemi parameetrid")
+    st.write(f"**Töömoodul:** `{MODELS['toomodul']}`")
+    st.write(f"**Turvamoodul:** `{MODELS['kontrollmoodul']}`")
+    st.write(f"**Tuvastatud CPU tuumi:** `{os.cpu_count() or 1}`")
     st.divider()
-    st.caption("Koik andmetootlus toimub lokaalses serveris.")
+    
+    st.subheader("Logide vaatamine")
+    if st.button("Näita viimaseid päringuid"):
+        if os.path.exists(LOG_FILE):
+            with open(LOG_FILE, "r", encoding="utf-8") as f:
+                logi_sisu = f.read()
+                st.text_area("Logifaili sisu:", logi_sisu, height=400)
+        else:
+            st.info("Logifail on veel tühi.")
+
+    st.divider()
+    st.caption("Kõik andmetöötlus toimub lokaalses privaatserveris.")
