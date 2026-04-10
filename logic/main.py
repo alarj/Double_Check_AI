@@ -86,6 +86,20 @@ with st.sidebar:
     # Salvestame valiku sessiooni
     st.session_state.current_timeout = selected_timeout
     
+    # --- UUS: Turvalisuse taseme valik ---
+    st.markdown("---")
+    security_option = st.selectbox(
+        "Vali turvalisuse tase:",
+        options=[
+            "Eelkontroll (küsimuse valideerimine) ja põhipäring",
+            "Põhipäring ja järelkontroll (tulemuse valideerimine)",
+            "Eelkontroll, põhipäring, järelkontroll",
+            "Ainult põhipäring"
+        ],
+        index=0,
+        disabled=st.session_state.processing
+    )
+    
     st.markdown("---")
     if st.button("Näita/Peida logid", disabled=st.session_state.processing):
         st.session_state.show_logs = not st.session_state.show_logs
@@ -106,14 +120,22 @@ status_placeholder = st.empty()
 
 # --- TÖÖTLEMINE ---
 if submit_button and user_input:
-    log_event("START", f"Sisend: {user_input[:40]} | Timeout: {selected_timeout}s")
+    log_event("START", f"Sisend: {user_input[:40]} | Timeout: {selected_timeout}s | Tase: {security_option}")
     start_time = time.time()
     
-    # 1. SAMM: Turvakontroll
-    with status_placeholder.container():
-        with st.spinner(f"Samm 1/2: Turvakontroll ({selected_timeout}s max)..."):
-            log_event("GUARD", f"Käivitan kontrolli ({GUARD_MODEL})")
-            safety_result = ask_ollama(GUARD_MODEL, f"Vasta ainult LUBATUD või BLOKEERITUD: {user_input}", selected_threads, selected_timeout)
+    # Loeme valikust välja, millised sammud tuleb läbida
+    do_pre = "Eelkontroll" in security_option
+    do_post = "järelkontroll" in security_option
+    only_main = security_option == "Ainult põhipäring"
+    
+    safety_result = "LUBATUD (Vahele jäetud)" # Vaikimisi lubatud, kui eelkontrolli ei tehta
+    
+    # 1. SAMM: Turvakontroll (Eelkontroll)
+    if do_pre and not only_main:
+        with status_placeholder.container():
+            with st.spinner(f"Samm 1: Turvakontroll ({selected_timeout}s max)..."):
+                log_event("GUARD_PRE", f"Käivitan eelkontrolli ({GUARD_MODEL})")
+                safety_result = ask_ollama(GUARD_MODEL, f"Vasta ainult LUBATUD või BLOKEERITUD: {user_input}", selected_threads, selected_timeout)
         
     if safety_result == "VIGA_TIMEOUT":
         log_event("VIGA", f"Turvakontroll aegus ({selected_timeout}s)")
@@ -121,11 +143,12 @@ if submit_button and user_input:
         st.session_state.last_status = "VIGA"
             
     elif "LUBATUD" in safety_result.upper():
-        log_event("GUARD", "Otsus: LUBATUD")
+        if do_pre and not only_main:
+            log_event("GUARD_PRE", "Otsus: LUBATUD")
         
         # 2. SAMM: Põhivastus
         with status_placeholder.container():
-            with st.spinner(f"Samm 2/2: Genereerin vastust ({MAIN_MODEL})..."):
+            with st.spinner(f"Samm 2: Genereerin vastust ({MAIN_MODEL})..."):
                 log_event("MAIN", f"Käivitan põhimudeli ({MAIN_MODEL})")
                 main_res = ask_ollama(MAIN_MODEL, user_input, selected_threads, selected_timeout)
         
@@ -134,12 +157,32 @@ if submit_button and user_input:
             st.session_state.last_response = f"Serveri viga: {main_res}"
             st.session_state.last_status = "VIGA"
         else:
-            duration = round(time.time() - start_time, 2)
-            log_event("FINISH", f"Vastus valmis {duration}s jooksul.")
-            st.session_state.last_response = main_res
-            st.session_state.last_status = "OK"
+            # 3. SAMM: Järelkontroll
+            post_safety_result = "LUBATUD (Vahele jäetud)"
+            if do_post and not only_main:
+                with status_placeholder.container():
+                    with st.spinner(f"Samm 3: Järelkontroll ({selected_timeout}s max)..."):
+                        log_event("GUARD_POST", f"Käivitan järelkontrolli ({GUARD_MODEL})")
+                        post_safety_result = ask_ollama(GUARD_MODEL, f"Hinda kas see tehisintellekti vastus on ohutu. Vasta ainult LUBATUD või BLOKEERITUD: {main_res}", selected_threads, selected_timeout)
+            
+            if post_safety_result == "VIGA_TIMEOUT":
+                log_event("VIGA", f"Järelkontroll aegus ({selected_timeout}s)")
+                st.session_state.last_response = f"⌛ Järelkontroll aegus. Proovi timeouti tõsta (hetkel {selected_timeout}s)."
+                st.session_state.last_status = "VIGA"
+            elif "LUBATUD" in post_safety_result.upper():
+                if do_post and not only_main:
+                    log_event("GUARD_POST", "Otsus: LUBATUD")
+                
+                duration = round(time.time() - start_time, 2)
+                log_event("FINISH", f"Vastus valmis {duration}s jooksul.")
+                st.session_state.last_response = main_res
+                st.session_state.last_status = "OK"
+            else:
+                log_event("GUARD_POST", "Otsus: BLOKEERITUD")
+                st.session_state.last_response = "🚨 Põhimudeli genereeritud vastus blokeeriti järelkontrollis turvakaalutlustel."
+                st.session_state.last_status = "BLOKEERITUD"
     else:
-        log_event("GUARD", "Otsus: BLOKEERITUD")
+        log_event("GUARD_PRE", "Otsus: BLOKEERITUD")
         st.session_state.last_response = "🚨 See päring on turvakaalutlustel blokeeritud."
         st.session_state.last_status = "BLOKEERITUD"
 
