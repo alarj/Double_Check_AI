@@ -1,3 +1,4 @@
+# --- ver 0.4 -- Alar 10.04, lisatud dünaamiline mudelite valik ja promptide logimine
 # --- ver 0.3 -- Alar 10.04, turvataseme valik, JSON-põhine logimine ja täisandmete talletamine
 # --- ver 0.2 -- Alar 09.04, lisatud logimine, eestikeelsem kasutajaliides ja muud veaparandused
 import streamlit as st
@@ -5,13 +6,11 @@ import requests
 import datetime
 import os
 import time
-import json  # Lisatud JSON tugi
+import json
 
 # --- KONFIGURATSIOON ---
 OLLAMA_URL = "http://ollama:11434/api/generate"
 LOG_FILE = "/app/ai_turvakiht.log"
-GUARD_MODEL = "phi3:mini"
-MAIN_MODEL = "llama3:8b"
 
 total_cores = os.cpu_count() or 1
 default_threads = total_cores
@@ -64,9 +63,15 @@ with st.sidebar:
     st.title("🛡️ Firma Sise-AI")
     st.info(f"Tuvastatud tuumi: {total_cores}")
     
+    st.subheader("⚙️ Seaded")
     selected_threads = st.number_input("Threads kasutusel:", 1, total_cores, default_threads, disabled=st.session_state.processing)
     selected_timeout = st.number_input("Päringu timeout (sek):", 30, 1200, st.session_state.current_timeout, step=30, disabled=st.session_state.processing)
     st.session_state.current_timeout = selected_timeout
+    
+    st.markdown("---")
+    st.subheader("🧠 Mudelite valik")
+    guard_model_input = st.text_input("Turvamudel (Eel/Järelkontroll):", "gemma2:2b", disabled=st.session_state.processing)
+    main_model_input = st.text_input("Põhimudel (Vastaja):", "llama3:8b", disabled=st.session_state.processing)
     
     st.markdown("---")
     security_option = st.selectbox(
@@ -106,18 +111,16 @@ if submit_button and user_input:
     query_start_dt = get_ee_time().strftime("%Y-%m-%d %H:%M:%S")
     start_time_perf = time.time()
     
-    # log_event("START", f"Sisend: {user_input[:40]} | Tase: {security_option}")
-    
-    # Initsialiseerime logiandmed staatilise algusajaga
+    # Initsialiseerime logiandmed staatilise algusajaga (nüüd koos mudelite ja promptiväljadega)
     log_data = {
         "timestamp": query_start_dt,
         "user_input": user_input,
         "security_level": security_option,
         "timeout": selected_timeout,
         "threads": selected_threads,
-        "pre_check": {"model": GUARD_MODEL, "status": "SKIP", "result": None, "start_time": None},
-        "main_query": {"model": MAIN_MODEL, "status": "SKIP", "result": None, "start_time": None},
-        "post_check": {"model": GUARD_MODEL, "status": "SKIP", "result": None, "start_time": None},
+        "pre_check": {"model": guard_model_input, "status": "SKIP", "result": None, "start_time": None, "prompt": None},
+        "main_query": {"model": main_model_input, "status": "SKIP", "result": None, "start_time": None, "prompt": None},
+        "post_check": {"model": guard_model_input, "status": "SKIP", "result": None, "start_time": None, "prompt": None},
         "total_duration": 0,
         "end_time": None,
         "final_status": "PENDING"
@@ -134,7 +137,12 @@ if submit_button and user_input:
         with status_placeholder.container():
             with st.spinner(f"Samm 1: Turvakontroll ({selected_timeout}s)..."):
                 log_data["pre_check"]["start_time"] = get_ee_time().strftime("%Y-%m-%d %H:%M:%S")
-                safety_result = ask_ollama(GUARD_MODEL, f"Vasta ainult LUBATUD või BLOKEERITUD: {user_input}", selected_threads, selected_timeout)
+                
+                # Fikseerime ja logime prompti
+                pre_prompt = f"Vasta ainult LUBATUD või BLOKEERITUD: {user_input}"
+                log_data["pre_check"]["prompt"] = pre_prompt
+                
+                safety_result = ask_ollama(guard_model_input, pre_prompt, selected_threads, selected_timeout)
                 log_data["pre_check"].update({"status": "DONE", "result": safety_result})
         
     if safety_result == "VIGA_TIMEOUT":
@@ -145,9 +153,14 @@ if submit_button and user_input:
     elif "LUBATUD" in safety_result.upper() or not do_pre or only_main:
         # 2. SAMM: Põhivastus
         with status_placeholder.container():
-            with st.spinner(f"Samm 2: Genereerin vastust ({MAIN_MODEL})..."):
+            with st.spinner(f"Samm 2: Genereerin vastust ({main_model_input})..."):
                 log_data["main_query"]["start_time"] = get_ee_time().strftime("%Y-%m-%d %H:%M:%S")
-                main_res = ask_ollama(MAIN_MODEL, user_input, selected_threads, selected_timeout)
+                
+                # Fikseerime ja logime prompti
+                main_prompt = user_input
+                log_data["main_query"]["prompt"] = main_prompt
+                
+                main_res = ask_ollama(main_model_input, main_prompt, selected_threads, selected_timeout)
                 log_data["main_query"].update({"status": "DONE", "result": main_res})
         
         if "VIGA" in main_res:
@@ -161,7 +174,12 @@ if submit_button and user_input:
                 with status_placeholder.container():
                     with st.spinner(f"Samm 3: Järelkontroll ({selected_timeout}s)..."):
                         log_data["post_check"]["start_time"] = get_ee_time().strftime("%Y-%m-%d %H:%M:%S")
-                        post_safety_result = ask_ollama(GUARD_MODEL, f"Hinda kas see vastus on ohutu. Vasta ainult LUBATUD või BLOKEERITUD: {main_res}", selected_threads, selected_timeout)
+                        
+                        # Fikseerime ja logime prompti
+                        post_prompt = f"Hinda kas see vastus on ohutu. Vasta ainult LUBATUD või BLOKEERITUD: {main_res}"
+                        log_data["post_check"]["prompt"] = post_prompt
+                        
+                        post_safety_result = ask_ollama(guard_model_input, post_prompt, selected_threads, selected_timeout)
                         log_data["post_check"].update({"status": "DONE", "result": post_safety_result})
             
             if post_safety_result == "VIGA_TIMEOUT":

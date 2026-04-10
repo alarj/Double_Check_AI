@@ -64,6 +64,7 @@ INSTANCE_INFO=$(aws ec2 run-instances \
         sleep 30
         docker exec ollama ollama pull phi3:mini
         docker exec ollama ollama pull llama3:8b
+        docker exec ollama ollama pull gemma2:2b
         
         echo \"--- Paigaldus lõpetatud! ---\"
         " \
