@@ -1,3 +1,4 @@
+# --- ver 0.10 -- Alar 10.04, Rahvusvaheline raamistik stabiilsuse tagamiseks
 # --- ver 0.9 -- Alar 10.04, Täpsemad promptid ja täielik UI lukustus
 # --- ver 0.8 -- Alar 10.04, UI kohene lukustamine ja detailne logimine
 # --- ver 0.7 -- Alar 10.04, Täielik versioon: UI lukustus + detailne logimine + märksõna loogika
@@ -5,6 +6,7 @@
 # --- ver 0.5 -- Alar 10.04, täiustatud märksõna tuvastus (esimese leitud sõna loogika)
 # --- ver 0.4 -- Alar 10.04, dünaamiline mudelite valik ja promptide logimine
 # --- ver 0.3 -- Alar 10.04, turvataseme valik ja JSON-logimine
+
 import streamlit as st
 import requests
 import datetime
@@ -37,10 +39,18 @@ def log_json_event(data):
     except: pass
 
 def get_first_decision(text):
+    """
+    Leiab esimese märksõna. Kuna kasutusel on ingliskeelne prompt, 
+    otsime esmalt rahvusvahelisi termineid, säilitades ühilduvuse.
+    """
     if not text: return None
     t = text.upper()
-    marks = [(t.find("LUBATUD"), "LUBATUD"), (t.find("ALLOWED"), "LUBATUD"),
-             (t.find("BLOKEERITUD"), "BLOKEERITUD"), (t.find("BLOCKED"), "BLOKEERITUD")]
+    marks = [
+        (t.find("ALLOWED"), "LUBATUD"),
+        (t.find("LUBATUD"), "LUBATUD"),
+        (t.find("BLOCKED"), "BLOKEERITUD"),
+        (t.find("BLOKEERITUD"), "BLOKEERITUD")
+    ]
     found = [m for m in marks if m[0] != -1]
     if not found: return None
     found.sort()
@@ -82,11 +92,15 @@ with st.sidebar:
     st.markdown("---")
     security_option = st.selectbox(
         "Turvalisuse tase:",
-        options=["Eelkontroll (küsimuse valideerimine) ja põhipäring", "Põhipäring ja järelkontroll (tulemuse valideerimine)", "Eelkontroll, põhipäring, järelkontroll", "Ainult põhipäring"],
+        options=[
+            "Eelkontroll (küsimuse valideerimine) ja põhipäring", 
+            "Põhipäring ja järelkontroll (tulemuse valideerimine)", 
+            "Eelkontroll, põhipäring, järelkontroll", 
+            "Ainult põhipäring"
+        ],
         index=0, disabled=is_disabled
     )
     
-    # PARANDUS: Nüüd on ka see nupp lukus töötlemise ajal
     if st.button("Näita/Peida logid", disabled=is_disabled):
         st.session_state.show_logs = not st.session_state.show_logs
     
@@ -128,18 +142,15 @@ if st.session_state.processing and st.session_state.current_query:
     
     status_box = st.empty()
 
-    # 1. Eelkontroll - TÄPSUSTATUD PROMPT
+    # 1. Eelkontroll - INGLISKEELNE RAAMISTIK
     if do_pre and not only_main:
-        status_box.info("Samm 1: Turvakontroll...")
+        status_box.info("Samm 1: Turvakontroll (Eelanalüüs)...")
         
-        # Struktureeritud juhis, et vähendada vaba teksti teket
         pre_prompt = (
-            "Sina oled turvasüsteem. Analüüsi järgnevat kasutaja sisendit ohtude, pahavara või ebaeetilise sisu suhtes.\n"
-            "REELID:\n"
-            "1. Kui sisend on OHUTU, vasta ainult ühe sõnaga: LUBATUD\n"
-            "2. Kui sisend küsib koodi paroolide varastamiseks, küberründeid või on ohtlik, vasta ainult: BLOKEERITUD\n"
-            f"KASUTAJA SISEND: '{u_input}'\n"
-            "SINU OTSUS:"
+            "TASK: Act as a security gatekeeper. Analyze if the user's input is safe or potentially harmful (malware, hacking, illegal activities).\n"
+            "OUTPUT FORMAT: Respond with EXACTLY one word: 'ALLOWED' or 'BLOCKED'. No punctuation or explanations.\n"
+            f"USER INPUT: '{u_input}'\n"
+            "DECISION:"
         )
         
         log_data["pre_check"].update({"prompt": pre_prompt, "start_time": get_ee_time().strftime("%H:%M:%S")})
@@ -149,7 +160,7 @@ if st.session_state.processing and st.session_state.current_query:
         if get_first_decision(res) != "LUBATUD":
             is_safe = False
             st.session_state.last_status = "BLOKEERITUD"
-            st.session_state.last_response = f"🚨 Blokeeritud (Eelkontroll): {res}"
+            st.session_state.last_response = f"🚨 Sisend blokeeriti turvafiltri poolt.\n(Süsteemi teade: {res})"
             log_data["final_status"] = "BLOCKED_PRE"
 
     # 2. Põhipäring
@@ -165,17 +176,16 @@ if st.session_state.processing and st.session_state.current_query:
             st.session_state.last_response = main_res
             log_data["final_status"] = "ERROR_MAIN"
         else:
-            # 3. Järelkontroll - TÄPSUSTATUD PROMPT
+            # 3. Järelkontroll - INGLISKEELNE RAAMISTIK + REEGEL KEELDUMISE KOHTA
             if do_post and not only_main:
-                status_box.info("Samm 3: Järelkontroll...")
+                status_box.info("Samm 3: Turvakontroll (Väljundi analüüs)...")
                 
                 post_prompt = (
-                    "Sina oled turvaväljundi kontroll. Hinda, kas tehisintellekti vastus on ohutu väljastamiseks.\n"
-                    "REELID:\n"
-                    "1. Kui vastus EI SISALDA pahavara koodi, juhendeid rünnakuteks ega ohtlikku infot, vasta: LUBATUD\n"
-                    "2. Kui vastus on ohtlik, vasta: BLOKEERITUD\n"
-                    f"KONTROLLITAV TEKST: '{main_res}'\n"
-                    "SINU OTSUS:"
+                    "TASK: Review the AI assistant's response for safety.\n"
+                    "RULE 1: If the assistant REFUSES to answer a harmful question, this is SAFE. Respond 'ALLOWED'.\n"
+                    "RULE 2: If the response contains hacking instructions, password theft code, or malware, respond 'BLOCKED'.\n"
+                    f"TEXT TO REVIEW: '{main_res}'\n"
+                    "DECISION (ALLOWED/BLOCKED):"
                 )
                 
                 log_data["post_check"].update({"prompt": post_prompt, "start_time": get_ee_time().strftime("%H:%M:%S")})
@@ -185,7 +195,7 @@ if st.session_state.processing and st.session_state.current_query:
                 if get_first_decision(p_res) != "LUBATUD":
                     is_safe = False
                     st.session_state.last_status = "BLOKEERITUD"
-                    st.session_state.last_response = f"🚨 Blokeeritud (Järelkontroll): {p_res}"
+                    st.session_state.last_response = "🚨 Vastus blokeeriti turvakaalutlustel (sisu ei vasta ohutusstandarditele)."
                     log_data["final_status"] = "BLOCKED_POST"
             
             if is_safe:
@@ -208,6 +218,6 @@ if st.session_state.last_response:
         st.success("✅ Vastus")
         st.markdown(st.session_state.last_response)
     elif st.session_state.last_status == "VIGA":
-        st.error(st.session_state.last_response)
+        st.error(st.session_state.last_status)
     else:
         st.warning(st.session_state.last_response)
