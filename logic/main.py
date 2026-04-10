@@ -11,6 +11,8 @@ import json
 # --- KONFIGURATSIOON ---
 OLLAMA_URL = "http://ollama:11434/api/generate"
 LOG_FILE = "/app/ai_turvakiht.log"
+GUARD_MODEL = "gemma2:2b"  # töötab paremini kui senine phi3:mini
+MAIN_MODEL = "llama3:8b"
 
 total_cores = os.cpu_count() or 1
 default_threads = total_cores
@@ -70,8 +72,8 @@ with st.sidebar:
     
     st.markdown("---")
     st.subheader("🧠 Mudelite valik")
-    guard_model_input = st.text_input("Turvamudel (Eel/Järelkontroll):", "gemma2:2b", disabled=st.session_state.processing)
-    main_model_input = st.text_input("Põhimudel (Vastaja):", "llama3:8b", disabled=st.session_state.processing)
+    guard_model_input = st.text_input("Turvamudel (Eel/Järelkontroll):", GUARD_MODEL, disabled=st.session_state.processing)
+    main_model_input = st.text_input("Põhimudel (Vastaja):", MAIN_MODEL, disabled=st.session_state.processing)
     
     st.markdown("---")
     security_option = st.selectbox(
