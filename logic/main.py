@@ -36,7 +36,7 @@ def log_json_event(data):
 def ask_ollama(model, prompt, threads, timeout):
     """Saadab päringu kasutades määratud timeouti."""
     try:
-        payload = {"model": model, "prompt": prompt, "stream": False, "options": {"num_thread": threads}}
+        payload = {"model": model, "prompt": prompt, "stream": False, "keep_alive": -1, "options": {"num_thread": threads}}
         response = requests.post(OLLAMA_URL, json=payload, timeout=timeout)
         if response.status_code == 200:
             return response.json().get("response", "").strip()
