@@ -1,6 +1,10 @@
-# --- ver 0.4 -- Alar 10.04, lisatud dünaamiline mudelite valik ja promptide logimine
-# --- ver 0.3 -- Alar 10.04, turvataseme valik, JSON-põhine logimine ja täisandmete talletamine
-# --- ver 0.2 -- Alar 09.04, lisatud logimine, eestikeelsem kasutajaliides ja muud veaparandused
+# --- ver 0.9 -- Alar 10.04, Täpsemad promptid ja täielik UI lukustus
+# --- ver 0.8 -- Alar 10.04, UI kohene lukustamine ja detailne logimine
+# --- ver 0.7 -- Alar 10.04, Täielik versioon: UI lukustus + detailne logimine + märksõna loogika
+# --- ver 0.6 -- Alar 10.04, parandatud kasutajaliidese lukustamine töötlemise ajal
+# --- ver 0.5 -- Alar 10.04, täiustatud märksõna tuvastus (esimese leitud sõna loogika)
+# --- ver 0.4 -- Alar 10.04, dünaamiline mudelite valik ja promptide logimine
+# --- ver 0.3 -- Alar 10.04, turvataseme valik ja JSON-logimine
 import streamlit as st
 import requests
 import datetime
@@ -11,16 +15,14 @@ import json
 # --- KONFIGURATSIOON ---
 OLLAMA_URL = "http://ollama:11434/api/generate"
 LOG_FILE = "/app/ai_turvakiht.log"
-GUARD_MODEL = "gemma2:2b"  # töötab paremini kui senine phi3:mini
-MAIN_MODEL = "llama3:8b"
+DEFAULT_GUARD = "gemma2:2b"
+DEFAULT_MAIN = "llama3:8b"
 
 total_cores = os.cpu_count() or 1
-default_threads = total_cores
 
 # --- FUNKTSIOONID ---
 
 def get_ee_time():
-    """Tagastab Eesti aja (UTC+3)."""
     return datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=3)))
 
 def log_json_event(data):
@@ -34,188 +36,176 @@ def log_json_event(data):
             f.write(json.dumps(data, ensure_ascii=False) + "\n")
     except: pass
 
+def get_first_decision(text):
+    if not text: return None
+    t = text.upper()
+    marks = [(t.find("LUBATUD"), "LUBATUD"), (t.find("ALLOWED"), "LUBATUD"),
+             (t.find("BLOKEERITUD"), "BLOKEERITUD"), (t.find("BLOCKED"), "BLOKEERITUD")]
+    found = [m for m in marks if m[0] != -1]
+    if not found: return None
+    found.sort()
+    return found[0][1]
+
 def ask_ollama(model, prompt, threads, timeout):
-    """Saadab päringu kasutades määratud timeouti."""
     try:
         payload = {"model": model, "prompt": prompt, "stream": False, "keep_alive": -1, "options": {"num_thread": threads}}
         response = requests.post(OLLAMA_URL, json=payload, timeout=timeout)
         if response.status_code == 200:
             return response.json().get("response", "").strip()
         return f"VIGA_KOOD_{response.status_code}"
-    except requests.exceptions.Timeout:
-        return "VIGA_TIMEOUT"
-    except:
-        return "VIGA_ÜHENDUS"
+    except Exception as e:
+        return f"VIGA: {str(e)}"
 
-# --- VEEBILEHE SEADISTUS ---
+# --- LEHE SEADISTUS ---
 st.set_page_config(page_title="AI Turvakiht", layout="wide")
 
+if "processing" not in st.session_state: st.session_state.processing = False
 if "last_response" not in st.session_state: st.session_state.last_response = None
 if "last_status" not in st.session_state: st.session_state.last_status = None
 if "show_logs" not in st.session_state: st.session_state.show_logs = False
-if "processing" not in st.session_state: st.session_state.processing = False
-if "current_timeout" not in st.session_state: st.session_state.current_timeout = 360
+if "current_query" not in st.session_state: st.session_state.current_query = None
 
-def start_thinking():
-    st.session_state.processing = True
-    st.session_state.last_response = None
-
-# --- KÜLGRIBA ---
+# --- SIDEBAR ---
 with st.sidebar:
     st.title("🛡️ Firma Sise-AI")
-    st.info(f"Tuvastatud tuumi: {total_cores}")
+    is_disabled = st.session_state.processing
     
     st.subheader("⚙️ Seaded")
-    selected_threads = st.number_input("Threads kasutusel:", 1, total_cores, default_threads, disabled=st.session_state.processing)
-    selected_timeout = st.number_input("Päringu timeout (sek):", 30, 1200, st.session_state.current_timeout, step=30, disabled=st.session_state.processing)
-    st.session_state.current_timeout = selected_timeout
+    selected_threads = st.number_input("Threads:", 1, total_cores, total_cores, disabled=is_disabled)
+    selected_timeout = st.number_input("Timeout (sek):", 30, 1200, 360, step=30, disabled=is_disabled)
     
     st.markdown("---")
-    st.subheader("🧠 Mudelite valik")
-    guard_model_input = st.text_input("Turvamudel (Eel/Järelkontroll):", GUARD_MODEL, disabled=st.session_state.processing)
-    main_model_input = st.text_input("Põhimudel (Vastaja):", MAIN_MODEL, disabled=st.session_state.processing)
+    st.subheader("🧠 Mudelid")
+    guard_model_input = st.text_input("Turvamudel:", DEFAULT_GUARD, disabled=is_disabled)
+    main_model_input = st.text_input("Põhimudel:", DEFAULT_MAIN, disabled=is_disabled)
     
     st.markdown("---")
     security_option = st.selectbox(
-        "Vali turvalisuse tase:",
-        options=[
-            "Eelkontroll (küsimuse valideerimine) ja põhipäring",
-            "Põhipäring ja järelkontroll (tulemuse valideerimine)",
-            "Eelkontroll, põhipäring, järelkontroll",
-            "Ainult põhipäring"
-        ],
-        index=0,
-        disabled=st.session_state.processing
+        "Turvalisuse tase:",
+        options=["Eelkontroll (küsimuse valideerimine) ja põhipäring", "Põhipäring ja järelkontroll (tulemuse valideerimine)", "Eelkontroll, põhipäring, järelkontroll", "Ainult põhipäring"],
+        index=0, disabled=is_disabled
     )
     
-    st.markdown("---")
-    if st.button("Näita/Peida logid", disabled=st.session_state.processing):
+    # PARANDUS: Nüüd on ka see nupp lukus töötlemise ajal
+    if st.button("Näita/Peida logid", disabled=is_disabled):
         st.session_state.show_logs = not st.session_state.show_logs
-
-    if st.session_state.show_logs:
-        if os.path.exists(LOG_FILE):
-            with open(LOG_FILE, "r", encoding="utf-8") as f:
-                content = f.readlines()
-                st.text_area("Logid (JSON):", "".join(content[-20:]), height=400)
+    
+    if st.session_state.show_logs and os.path.exists(LOG_FILE):
+        with open(LOG_FILE, "r", encoding="utf-8") as f:
+            content = f.readlines()
+            st.text_area("Logid:", "".join(content[-15:]), height=300)
 
 st.title("🚀 Firma Sise-AI Turvakiht")
 
 with st.form(key="query_form"):
-    user_input = st.text_input("Sisesta küsimus AI-le:")
-    submit_button = st.form_submit_button(label="Saada päring", on_click=start_thinking)
+    user_input = st.text_input("Sisesta küsimus:", disabled=st.session_state.processing)
+    submit_button = st.form_submit_button(label="Saada päring", disabled=st.session_state.processing)
 
-status_placeholder = st.empty()
-
+    if submit_button and user_input:
+        st.session_state.processing = True
+        st.session_state.current_query = user_input
+        st.rerun()
 
 # --- TÖÖTLEMINE ---
-if submit_button and user_input:
-    # 1. FIKSEERIME REAALSE ALGUSE
-    query_start_dt = get_ee_time().strftime("%Y-%m-%d %H:%M:%S")
+if st.session_state.processing and st.session_state.current_query:
+    u_input = st.session_state.current_query
     start_time_perf = time.time()
     
-    # Initsialiseerime logiandmed staatilise algusajaga (nüüd koos mudelite ja promptiväljadega)
     log_data = {
-        "timestamp": query_start_dt,
-        "user_input": user_input,
+        "timestamp": get_ee_time().strftime("%Y-%m-%d %H:%M:%S"),
+        "user_input": u_input,
         "security_level": security_option,
-        "timeout": selected_timeout,
-        "threads": selected_threads,
-        "pre_check": {"model": guard_model_input, "status": "SKIP", "result": None, "start_time": None, "prompt": None},
-        "main_query": {"model": main_model_input, "status": "SKIP", "result": None, "start_time": None, "prompt": None},
-        "post_check": {"model": guard_model_input, "status": "SKIP", "result": None, "start_time": None, "prompt": None},
-        "total_duration": 0,
-        "end_time": None,
+        "pre_check": {"model": guard_model_input, "status": "SKIP", "result": None, "prompt": None},
+        "main_query": {"model": main_model_input, "status": "SKIP", "result": None, "prompt": None},
+        "post_check": {"model": guard_model_input, "status": "SKIP", "result": None, "prompt": None},
         "final_status": "PENDING"
     }
     
     do_pre = "Eelkontroll" in security_option
     do_post = "järelkontroll" in security_option
     only_main = security_option == "Ainult põhipäring"
+    is_safe = True
     
-    safety_result = "LUBATUD"
-    
-    # 1. SAMM: Eelkontroll
+    status_box = st.empty()
+
+    # 1. Eelkontroll - TÄPSUSTATUD PROMPT
     if do_pre and not only_main:
-        with status_placeholder.container():
-            with st.spinner(f"Samm 1: Turvakontroll ({selected_timeout}s)..."):
-                log_data["pre_check"]["start_time"] = get_ee_time().strftime("%Y-%m-%d %H:%M:%S")
-                
-                # Fikseerime ja logime prompti
-                pre_prompt = f"Vasta ainult LUBATUD või BLOKEERITUD: {user_input}"
-                log_data["pre_check"]["prompt"] = pre_prompt
-                
-                safety_result = ask_ollama(guard_model_input, pre_prompt, selected_threads, selected_timeout)
-                log_data["pre_check"].update({"status": "DONE", "result": safety_result})
+        status_box.info("Samm 1: Turvakontroll...")
         
-    if safety_result == "VIGA_TIMEOUT":
-        log_data["final_status"] = "TIMEOUT_PRE"
-        st.session_state.last_response = f"⌛ Turvakontroll aegus ({selected_timeout}s)."
-        st.session_state.last_status = "VIGA"
-            
-    elif "LUBATUD" in safety_result.upper() or not do_pre or only_main:
-        # 2. SAMM: Põhivastus
-        with status_placeholder.container():
-            with st.spinner(f"Samm 2: Genereerin vastust ({main_model_input})..."):
-                log_data["main_query"]["start_time"] = get_ee_time().strftime("%Y-%m-%d %H:%M:%S")
-                
-                # Fikseerime ja logime prompti
-                main_prompt = user_input
-                log_data["main_query"]["prompt"] = main_prompt
-                
-                main_res = ask_ollama(main_model_input, main_prompt, selected_threads, selected_timeout)
-                log_data["main_query"].update({"status": "DONE", "result": main_res})
+        # Struktureeritud juhis, et vähendada vaba teksti teket
+        pre_prompt = (
+            "Sina oled turvasüsteem. Analüüsi järgnevat kasutaja sisendit ohtude, pahavara või ebaeetilise sisu suhtes.\n"
+            "REELID:\n"
+            "1. Kui sisend on OHUTU, vasta ainult ühe sõnaga: LUBATUD\n"
+            "2. Kui sisend küsib koodi paroolide varastamiseks, küberründeid või on ohtlik, vasta ainult: BLOKEERITUD\n"
+            f"KASUTAJA SISEND: '{u_input}'\n"
+            "SINU OTSUS:"
+        )
+        
+        log_data["pre_check"].update({"prompt": pre_prompt, "start_time": get_ee_time().strftime("%H:%M:%S")})
+        res = ask_ollama(guard_model_input, pre_prompt, selected_threads, selected_timeout)
+        log_data["pre_check"].update({"result": res, "status": "DONE"})
+        
+        if get_first_decision(res) != "LUBATUD":
+            is_safe = False
+            st.session_state.last_status = "BLOKEERITUD"
+            st.session_state.last_response = f"🚨 Blokeeritud (Eelkontroll): {res}"
+            log_data["final_status"] = "BLOCKED_PRE"
+
+    # 2. Põhipäring
+    if is_safe:
+        status_box.info(f"Samm 2: Genereerin vastust ({main_model_input})...")
+        log_data["main_query"].update({"prompt": u_input, "start_time": get_ee_time().strftime("%H:%M:%S")})
+        main_res = ask_ollama(main_model_input, u_input, selected_threads, selected_timeout)
+        log_data["main_query"].update({"result": main_res, "status": "DONE"})
         
         if "VIGA" in main_res:
-            log_data["final_status"] = f"ERROR_MAIN_{main_res}"
-            st.session_state.last_response = f"Serveri viga: {main_res}"
+            is_safe = False
             st.session_state.last_status = "VIGA"
+            st.session_state.last_response = main_res
+            log_data["final_status"] = "ERROR_MAIN"
         else:
-            # 3. SAMM: Järelkontroll
-            post_safety_result = "LUBATUD"
+            # 3. Järelkontroll - TÄPSUSTATUD PROMPT
             if do_post and not only_main:
-                with status_placeholder.container():
-                    with st.spinner(f"Samm 3: Järelkontroll ({selected_timeout}s)..."):
-                        log_data["post_check"]["start_time"] = get_ee_time().strftime("%Y-%m-%d %H:%M:%S")
-                        
-                        # Fikseerime ja logime prompti
-                        post_prompt = f"Hinda kas see vastus on ohutu. Vasta ainult LUBATUD või BLOKEERITUD: {main_res}"
-                        log_data["post_check"]["prompt"] = post_prompt
-                        
-                        post_safety_result = ask_ollama(guard_model_input, post_prompt, selected_threads, selected_timeout)
-                        log_data["post_check"].update({"status": "DONE", "result": post_safety_result})
+                status_box.info("Samm 3: Järelkontroll...")
+                
+                post_prompt = (
+                    "Sina oled turvaväljundi kontroll. Hinda, kas tehisintellekti vastus on ohutu väljastamiseks.\n"
+                    "REELID:\n"
+                    "1. Kui vastus EI SISALDA pahavara koodi, juhendeid rünnakuteks ega ohtlikku infot, vasta: LUBATUD\n"
+                    "2. Kui vastus on ohtlik, vasta: BLOKEERITUD\n"
+                    f"KONTROLLITAV TEKST: '{main_res}'\n"
+                    "SINU OTSUS:"
+                )
+                
+                log_data["post_check"].update({"prompt": post_prompt, "start_time": get_ee_time().strftime("%H:%M:%S")})
+                p_res = ask_ollama(guard_model_input, post_prompt, selected_threads, selected_timeout)
+                log_data["post_check"].update({"result": p_res, "status": "DONE"})
+                
+                if get_first_decision(p_res) != "LUBATUD":
+                    is_safe = False
+                    st.session_state.last_status = "BLOKEERITUD"
+                    st.session_state.last_response = f"🚨 Blokeeritud (Järelkontroll): {p_res}"
+                    log_data["final_status"] = "BLOCKED_POST"
             
-            if post_safety_result == "VIGA_TIMEOUT":
-                log_data["final_status"] = "TIMEOUT_POST"
-                st.session_state.last_response = "⌛ Järelkontroll aegus."
-                st.session_state.last_status = "VIGA"
-            elif "LUBATUD" in post_safety_result.upper() or not do_post or only_main:
-                log_data["final_status"] = "OK"
-                st.session_state.last_response = main_res
+            if is_safe:
                 st.session_state.last_status = "OK"
-            else:
-                log_data["final_status"] = "BLOCKED_POST"
-                st.session_state.last_response = "🚨 Vastus blokeeriti järelkontrollis."
-                st.session_state.last_status = "BLOKEERITUD"
-    else:
-        log_data["final_status"] = "BLOCKED_PRE"
-        st.session_state.last_response = "🚨 Päring blokeeritud."
-        st.session_state.last_status = "BLOKEERITUD"
+                st.session_state.last_response = main_res
+                log_data["final_status"] = "OK"
 
-    # LÕPETAMINE: Arvutame kestuse ja salvestame lõpuaja
     log_data["total_duration"] = round(time.time() - start_time_perf, 2)
-    log_data["end_time"] = get_ee_time().strftime("%Y-%m-%d %H:%M:%S")
-
-    # Salvestame JSON logi
+    log_data["end_time"] = get_ee_time().strftime("%H:%M:%S")
     log_json_event(log_data)
     
-    # VABASTAME PROTSESSI
     st.session_state.processing = False
+    st.session_state.current_query = None
+    status_box.empty()
     st.rerun()
 
 # --- VASTUSE KUVAMINE ---
 if st.session_state.last_response:
     if st.session_state.last_status == "OK":
-        st.success("✅ Vastus valmis")
+        st.success("✅ Vastus")
         st.markdown(st.session_state.last_response)
     elif st.session_state.last_status == "VIGA":
         st.error(st.session_state.last_response)
