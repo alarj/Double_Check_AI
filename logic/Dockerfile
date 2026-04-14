@@ -1,24 +1,28 @@
+# Kasutame kergemat Pythoni baaspilti
 FROM python:3.10-slim
 
+# Määrame töökausta konteineris
 WORKDIR /app
 
+# Paigaldame süsteemsed sõltuvused, mis on vajalikud võrgusuhtluseks
+RUN apt-get update && apt-get install -y \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Kopeerime requirements faili ja paigaldame Pythoni paketid
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Kopeerime failid (sh main.py)
+# Kopeerime kogu loogika kausta sisu konteinerisse
+# (See on vajalik, et API ja UI kood oleks olemas)
 COPY . .
 
-# --- LOGIFAILI ETTEVALMISTUS ---
-# Tekitame tühja logifaili, et Docker ei peaks seda looma root-õigustega hiljem.
-# chmod 666 lubab kõigil (nii konteineri-Pythonil kui Ubuntu-kasutajal) faili kirjutada.
-RUN touch ai_turvakiht.log && chmod 666 ai_turvakiht.log
+# Tekitame tühja logifaili ja anname sellele kirjutamisõigused
+RUN touch /app/ai_turvakiht.log /app/api_access.log && chmod 666 /app/ai_turvakiht.log /app/api_access.log
 
+# Portide avamine (dokumentatsiooniks)
 EXPOSE 8501
+EXPOSE 8000
 
-# Lisame lipud, mis lubavad ühendusi igalt poolt ja lülitavad kontrollid välja
-CMD ["streamlit", "run", "main.py", \
-    "--server.address=0.0.0.0", \
-    "--server.port=8501", \
-    "--server.enableCORS=false", \
-    "--server.enableXsrfProtection=false", \
-    "--server.headless=true"]
+# Dockerfile ise ei määra lõplikku käsku, kuna compose failis on 
+# 'logic-app' ja 'api' jaoks erinevad 'command' väärtused.

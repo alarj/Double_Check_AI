@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
   ollama:
     image: ollama/ollama
@@ -8,16 +10,37 @@ services:
       - ollama_data:/root/.ollama
     ports:
       - "11434:11434"
+    restart: always
 
   logic-app:
     build: ./logic
     container_name: logic-app
+    # Kõik Streamliti lipud on siin ühes jadas
+    command: >
+      streamlit run main.py 
+      --server.address=0.0.0.0 
+      --server.port=8501 
+      --server.enableCORS=false 
+      --server.enableXsrfProtection=false 
+      --server.headless=true
     depends_on:
       - ollama
     ports:
       - "8501:8501"
     volumes:
-      - ./logic:/app  # ühendab serveri kausta konteineriga
+      - ./logic:/app
+    restart: always
+
+  api:
+    build: ./logic
+    container_name: logic-api
+    command: uvicorn api:app --host 0.0.0.0 --port 8000
+    volumes:
+      - ./logic:/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      - ollama
     restart: always
 
 volumes:
