@@ -19,14 +19,18 @@ def authenticate(credentials: HTTPBasicCredentials = Depends(security)):
     return credentials.username
 
 # --- MUDELID ---
-class InputRequest(BaseModel):
+class PreCheckRequest(BaseModel):
     user_input: str
-    model: str = "gemma2:2b"
+    model: str = "gemma2:2b"  # Turvakontrolliks vaikimisi Gemma
+
+class MainQueryRequest(BaseModel):
+    user_input: str
+    model: str = "llama3:8b"  # Põhipäringuks vaikimisi Llama
 
 class PostCheckRequest(BaseModel):
     user_input: str
     main_response: str
-    model: str = "gemma2:2b"
+    model: str = "gemma2:2b"  # Järelkontrolliks vaikimisi Gemma
 
 # --- LOGI FUNKTSIOON ---
 def log_api_event(action, detail, result, model=None):
@@ -35,7 +39,7 @@ def log_api_event(action, detail, result, model=None):
         "timestamp": logic_core.get_ee_time().strftime("%Y-%m-%d %H:%M:%S"),
         "action": action,
         "detail": detail,
-        "result": result, # Salvestab täispika vastuse
+        "result": result,
         "model": model,
         "source": "api_rest"
     }
@@ -48,7 +52,7 @@ def log_api_event(action, detail, result, model=None):
 # --- ENDPOINTID ---
 
 @app.post("/pre-check", dependencies=[Depends(authenticate)])
-def pre_check(req: InputRequest):
+def pre_check(req: PreCheckRequest):
     prompt = logic_core.PRE_CHECK_PROMPT.format(u_input=req.user_input)
     res = logic_core.ask_ollama(req.model, prompt, threads=4, timeout=120)
     decision = logic_core.get_first_decision(res) or "BLOKEERITUD"
@@ -56,7 +60,7 @@ def pre_check(req: InputRequest):
     return {"decision": decision, "raw_response": res}
 
 @app.post("/main-query", dependencies=[Depends(authenticate)])
-def main_query(req: InputRequest):
+def main_query(req: MainQueryRequest):
     res = logic_core.ask_ollama(req.model, req.user_input, threads=4, timeout=300)
     log_api_event("MAIN_QUERY", req.user_input, res, req.model)
     return {"response": res}
@@ -72,9 +76,13 @@ def post_check(req: PostCheckRequest):
 @app.get("/logs", dependencies=[Depends(authenticate)])
 def get_logs(
     source: str = Query("api", description="Logide allikas: 'api' või 'ui'"), 
-    start: str = Query(None, description="Algusaeg (YYYY-MM-DD HH:MM:SS)"), 
-    end: str = Query(None, description="Lõpuaeg (YYYY-MM-DD HH:MM:SS)")
+    start: str = Query(None, description="Algusaeg (YYYY-MM-DD HH:MM:SS)", example="2026-04-14 12:00:00"), 
+    end: str = Query(None, description="Lõpuaeg (YYYY-MM-DD HH:MM:SS)", example="2026-04-14 14:00:00")
 ):
+    """
+    Pärib logisid ajavahemiku alusel.
+    Toetatud formaadid: YYYY-MM-DD või YYYY-MM-DD HH:MM:SS
+    """
     path = API_LOG_FILE if source == "api" else UI_LOG_FILE
     if not os.path.exists(path): 
         return {"error": f"Logifail {source} puudub"}
