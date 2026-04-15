@@ -74,19 +74,34 @@ See projekt demonstreerib kahe-astmelist AI turvakihti (Guardrail), mis kasutab 
 
 ## Andmete ettevalmistus (RAG)
 
-Süsteem kasutab RAG-loogikat (Retrieval-Augmented Generation). Enne rakenduse kasutamist tuleb andmed vektorbaasi laadida.
+Süsteem kasutab RAG-loogikat (Retrieval-Augmented Generation). Enne rakenduse kasutamist tuleb andmed vektorbaasi laadida. Andmeid saab sisse logeda algandmetest, kui seda on vaja teha, siis tee nii:
 
 ### Eeltingimused
 - Ollama peab olema installitud ja jooksma.
 
 1.  **Kopeeri andmed**
     Pane oma hanke-XML failid kausta storage/raw/procurements/
+	Pane seaduste failid storage/raw/laws/
+	
 	
 2.  **Käivita indekseerimine**
-    ```bash
+    *Hanked:*
+	```bash
     source .venv/bin/activate
     cd data_pipeline
     python3 ingest.py
+    ``` 
+	*Seadused:*
+	```bash
+    source .venv/bin/activate
+    cd data_pipeline
+    python3 ingest_laws.py
+    ``` 
+	*Veebi juhendid:*
+	```bash
+    source .venv/bin/activate
+    cd data_pipeline
+    python3 scrape_guidelines.py
     ``` 
 
 ## Tehnoloogiad
