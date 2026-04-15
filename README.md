@@ -42,6 +42,7 @@ See projekt demonstreerib kahe-astmelist AI turvakihti (Guardrail), mis kasutab 
     docker compose up -d --build
     ```
     **NB!** Kui käsk docker compose up lõpetab, kirjuta ```docker ps```, et näha, kas rakendus on "Up" staatuses ja millist porti ta kasutab!
+
 4.  **Laadi alla AI mudelid (Kriitiline samm):**
     Esmakordsel seadistamisel tuleb mudelid käsitsi Ollama konteinerisse tõmmata, järgmistel käivitaitel pole seda enam vaja
     ```bash
@@ -51,6 +52,16 @@ See projekt demonstreerib kahe-astmelist AI turvakihti (Guardrail), mis kasutab 
 5.  **Ava rakendus:**
     Liides on kättesaadav aadressil `http://<serveri-ip>:8501` (serveri IP-aadressil pordis 8501).
     **NB!** serveri port 8501 peab olema internetist kättesaadav. Võib nõuda serveri või teenuspakkuja keskkonna eraldi häälestamist turvareeglite osas.
+
+## Andmete ettevalmistus (RAG)
+
+Süsteem kasutab RAG-loogikat (Retrieval-Augmented Generation). Enne rakenduse kasutamist tuleb andmed vektorbaasi laadida.
+
+### 1. Eeltingimused
+- Ollama peab olema installitud ja jooksma.
+- Tõmba embedding mudel:
+  ```bash
+  docker exec -it ollama ollama pull mxbai-embed-large
 
 ## Tehnoloogiad
 * **Streamlit** - Veebiliides.

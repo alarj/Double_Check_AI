@@ -3,3 +3,5 @@ streamlit
 fastapi
 uvicorn[standard]
 python-multipart
+lxml
+chromadb

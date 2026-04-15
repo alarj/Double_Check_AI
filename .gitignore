@@ -2,3 +2,9 @@ __pycache__/
 *.pyc
 *.log
 .env
+# Ignoreeri storage sisu, aga hoia struktuur alles
+storage/**
+!storage/**/
+!storage/**/.gitkeep
+# Ignoreeri venv kataloogi
+.venv/
