@@ -2,20 +2,21 @@ import os
 import xml.etree.ElementTree as ET
 import uuid
 import chromadb
-import time
 import re
+import json
+from datetime import datetime
 from chromadb.utils import embedding_functions
 
-# --- SEADISTUSED ---
-# Kasutame pildil näidatud ja kirjeldatud kataloogistruktuuri
+# --- KONFIGURATSIOON ---
 LAWS_DIR = "/app/storage/raw/laws/"
 DB_PATH = "/app/storage/vector_db"
-OLLAMA_URL = "http://ollama:11434" # Docker-vahelise suhtluse aadress kui jookseb dockeris
-# OLLAMA_URL = "http://localhost:11434" # benchmarkimise jaoks otse serveris
+INGEST_LOG_FILE = "/app/storage/ingest.log"
+OLLAMA_URL = "http://ollama:11434"
+EMBED_MODEL = "bge-m3"
 
 # --- ANDMEBAASI ÜHENDUS ---
 embedding_func = embedding_functions.OllamaEmbeddingFunction(
-    model_name="mxbai-embed-large",
+    model_name=EMBED_MODEL,
     url=OLLAMA_URL
 )
 
@@ -25,110 +26,181 @@ collection = client.get_or_create_collection(
     embedding_function=embedding_func
 )
 
-def clean_text(text):
-    """Puhastab teksti liigsetest tühikutest."""
-    if not text: return ""
-    text = re.sub(r'\s+', ' ', text)
-    return text.strip()
+def log_ingest_event(doc_type, event_name, details):
+    """Salvestab impordi sündmused eraldi logifaili."""
+    try:
+        log_entry = {
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "doc_type": doc_type,
+            "event": event_name,
+            "details": details
+        }
+        with open(INGEST_LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
+    except Exception as e:
+        print(f"VIGA LOGIMISEL: {e}")
 
-def parse_law_xml(file_path):
+def strip_ns(tag):
+    return tag.split('}')[-1] if '}' in tag else tag
+
+def parse_xml_to_legal_chunks(file_path):
     """
-    Parsib .akt faili ja eraldab paragrahvid koos metaandmetega.
-    Struktuur: <paragrahv> -> <paragrahvNr>, <kuvatavTekst>, <sisu>
+    Parsib XML-i, tuvastab liigi ja otsib volitusinfot (seost seadusega) 
+    nii volitusnormi märgendist kui ka preambulast.
     """
     chunks = []
     metadatas = []
+    filename = os.path.basename(file_path)
     
     try:
         tree = ET.parse(file_path)
         root = tree.getroot()
         
-        # Leime lühendi (nt RHS)
-        lyhend = "SEADUS"
-        meta = root.find(".//{tyviseadus_1_10.02.2010}metaandmed")
-        if meta is not None:
-            l_elem = meta.find("{tyviseadus_1_10.02.2010}lyhend")
-            if l_elem is not None: lyhend = l_elem.text
+        # 1. Dokumendi liik (seadus, määrus jne)
+        doc_type_val = "muu dokument"
+        doc_type_elem = root.find(".//{*}dokumentLiik")
+        if doc_type_elem is not None and doc_type_elem.text:
+            doc_type_val = doc_type_elem.text.strip().lower()
+        
+        doc_type_display = doc_type_val.upper()
 
-        # Otsime kõik paragrahvid üle kogu dokumendi
-        # Märkus: namespace võib varieeruda, seetõttu kasutame '//*' lähenemist teatud elementide puhul
-        for para in root.iter():
-            if para.tag.endswith('paragrahv'):
-                para_nr = ""
-                para_pealkiri = ""
-                para_sisu = []
+        # 2. Volitusinfo otsimine (Määruste puhul oluline seos seadusega)
+        volitus = ""
+        # Variant A: Spetsiaalne märgend
+        volitus_elem = root.find(".//{*}volitusnorm")
+        if volitus_elem is not None:
+            volitus = "".join(volitus_elem.itertext()).strip()
+        
+        # Variant B: Preambul (Sinu failis 115082017003.akt on info siin)
+        if not volitus:
+            preambul_elem = root.find(".//{*}preambul")
+            if preambul_elem is not None:
+                volitus = "".join(preambul_elem.itertext()).strip()
+                # Puhastame liigse tühja ja reavahetused
+                volitus = re.sub(r'\s+', ' ', volitus).strip()
 
-                # Paragrahvi number ja pealkiri
-                nr_elem = para.find(".//*[@id]") # Sageli on ID-ga elemendid numbrid
-                for child in para:
-                    tag = child.tag.split('}')[-1]
-                    if tag == "paragrahvNr":
-                        para_nr = child.text
-                    elif tag == "kuvatavTekst":
-                        para_pealkiri = child.text
-                    elif tag == "sisu":
-                        # Kogume kogu teksti sisu elemendi alt (lõiked, punktid)
-                        para_sisu.append(" ".join(child.itertext()))
+        # 3. Viide/lühend (nt RHS)
+        law_abbr = ""
+        lyhend_elem = root.find(".//{*}lyhend")
+        if lyhend_elem is not None and lyhend_elem.text:
+            law_abbr = lyhend_elem.text
+        
+        if not law_abbr:
+            valjaandja = root.find(".//{*}valjaandja")
+            akti_nr = root.find(".//{*}aktiNr")
+            if valjaandja is not None and akti_nr is not None:
+                law_abbr = f"{valjaandja.text} {doc_type_val} nr {akti_nr.text}"
+            else:
+                law_abbr = doc_type_val.capitalize()
 
-                full_content = clean_text(" ".join(para_sisu))
-                if full_content:
-                    # Loome tervikliku teksti: "§ 1. Pealkiri. Sisu..."
-                    display_header = f"§ {para_nr}. {para_pealkiri}".strip(". ")
-                    document_text = f"{lyhend} {display_header}: {full_content}"
+        # 4. Parsime sisu paragrahvi tasemel
+        for para in root.findall(".//{*}paragrahv"):
+            para_nr = ""
+            para_nr_elem = para.find("{*}paragrahvNr")
+            if para_nr_elem is not None:
+                para_nr = para_nr_elem.text
+            
+            def create_meta(prefix):
+                m = {
+                    "source": prefix, 
+                    "file": filename, 
+                    "section": str(para_nr),
+                    "type": doc_type_val
+                }
+                if volitus: m["volitus"] = volitus[:250] # Salvestame seose alusega
+                return m
+
+            loiked = para.findall(".//{*}loige")
+            if not loiked:
+                content = "".join(para.itertext()).strip()
+                if content:
+                    prefix = f"{law_abbr} § {para_nr}"
+                    chunks.append(f"[{doc_type_display}] {prefix}: {content}")
+                    metadatas.append(create_meta(prefix))
+            else:
+                for lg in loiked:
+                    lg_nr = ""
+                    lg_nr_elem = lg.find("{*}loigeNr")
+                    if lg_nr_elem is not None:
+                        lg_nr = lg_nr_elem.text
                     
-                    chunks.append(document_text)
-                    metadatas.append({
-                        "source": os.path.basename(file_path),
-                        "type": "law",
-                        "section": para_nr,
-                        "law_name": lyhend
-                    })
-                    
-        return chunks, metadatas
+                    punktid = lg.findall(".//{*}alapunkt")
+                    if not punktid:
+                        content = "".join(lg.itertext()).strip()
+                        if content:
+                            prefix = f"{law_abbr} § {para_nr} lg {lg_nr}"
+                            chunks.append(f"[{doc_type_display}] {prefix}: {content}")
+                            metadatas.append(create_meta(prefix))
+                    else:
+                        intro = ""
+                        for child in lg:
+                            if strip_ns(child.tag) == "alapunkt": break
+                            intro += "".join(child.itertext())
+                        
+                        for p in punktid:
+                            p_nr = ""
+                            p_nr_elem = p.find("{*}alapunktNr")
+                            if p_nr_elem is not None: p_nr = p_nr_elem.text
+                            p_content = "".join(p.itertext()).strip()
+                            prefix = f"{law_abbr} § {para_nr} lg {lg_nr} p {p_nr}"
+                            chunks.append(f"[{doc_type_display}] {prefix}: {intro.strip()} {p_content}")
+                            metadatas.append(create_meta(prefix))
+                            
+        return chunks, metadatas, doc_type_val
     except Exception as e:
-        print(f"Viga XML parsimisel {file_path}: {e}")
-        return [], []
+        print(f"Viga {file_path} parsimisel: {e}")
+        return [], [], "tundmatu"
 
 def run_ingest():
-    print(f"--- ALUSTAN SEADUSTE IMPORTI ({LAWS_DIR}) ---")
-    total_added = 0
+    start_time = datetime.now()
+    print(f"\n🚀 STRUKTUURNE IMPORT | DOKUMENDI LIIGID JA VOLITUSED")
     
     if not os.path.exists(LAWS_DIR):
-        print(f"VIGA: Kataloogi {LAWS_DIR} ei leitud!")
+        print(f"❌ VIGA: Kataloogi {LAWS_DIR} ei eksisteeri!")
         return
 
-    files = [f for f in os.listdir(LAWS_DIR) if f.endswith(".akt")]
+    files = [f for f in os.listdir(LAWS_DIR) if f.lower().endswith(".akt")]
+    log_ingest_event("SYSTEM", "IMPORT_STARTED", {"files_found": len(files)})
     
+    total_new_chunks = 0
+    skipped_files = 0
+    type_counts = {}
+
     for filename in files:
-        # Kontrollime duplikaate (allika põhjal)
-        existing = collection.get(where={"source": filename}, limit=1)
+        existing = collection.get(where={"file": filename}, limit=1)
         if existing and existing['ids']:
-            print(f"Hüppan üle: {filename} (juba olemas) ✅")
+            print(f"⏩ {filename} on juba olemas.")
+            skipped_files += 1
             continue
 
         path = os.path.join(LAWS_DIR, filename)
-        print(f"Töötlen: {filename}...", end=" ", flush=True)
-        
-        chunks, metas = parse_law_xml(path)
+        chunks, metas, doc_type = parse_xml_to_legal_chunks(path)
         
         if chunks:
-            # Lisame andmed baasi väikeste pakkidena (batch), et vältida timeout-e
-            batch_size = 5
+            print(f"📥 [{doc_type.upper()}] {filename}...", end=" ", flush=True)
+            batch_size = 20
             for i in range(0, len(chunks), batch_size):
                 end = i + batch_size
                 collection.add(
                     documents=chunks[i:end],
-                    ids=[str(uuid.uuid4()) for _ in chunks[i:end]],
+                    ids=[f"doc-{uuid.uuid4()}" for _ in chunks[i:end]],
                     metadatas=metas[i:end]
                 )
-                time.sleep(0.05) # Väike hingetõmbeaeg API-le
-            
-            total_added += len(chunks)
-            print(f"✅ Lisatud {len(chunks)} paragrahvi.")
+            total_new_chunks += len(chunks)
+            type_counts[doc_type] = type_counts.get(doc_type, 0) + 1
+            print(f"✅ {len(chunks)} osa lisatud.")
         else:
-            print(f"⚠️ Paragrahve ei leitud.")
+            print(f"⚠️ Failis {filename} puudus struktuurne sisu.")
 
-    print(f"--- IMPORT LÕPETATUD. Kokku lisati {total_added} kirjet. ---")
+    duration = (datetime.now() - start_time).total_seconds()
+    log_ingest_event("SYSTEM", "IMPORT_FINISHED", {
+        "new_chunks": total_new_chunks, 
+        "skipped_files": skipped_files,
+        "types_summary": type_counts,
+        "duration_sec": round(duration, 2)
+    })
+    
+    print(f"\n✨ VALMIS! Statistika: {type_counts}")
 
 if __name__ == "__main__":
     run_ingest()
