@@ -9,6 +9,8 @@ services:
     ports:
       - "11434:11434"
     restart: always
+    # See rida garanteerib, et mudelid tõmmatakse automaatselt käivitamisel
+    entrypoint: /bin/sh -c "ollama serve & sleep 10 && ollama pull llama3:8b && ollama pull gemma2:2b && ollama pull mxbai-embed-large && wait"
 
   logic-app:
     build: ./logic
@@ -16,7 +18,7 @@ services:
     working_dir: /app
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
-      - VECTOR_DB_PATH=/app/storage/vector_db
+    # Käivitame Streamlit rakenduse
     command: >
       streamlit run main.py 
       --server.address=0.0.0.0 
@@ -30,6 +32,8 @@ services:
       - "8501:8501"
     volumes:
       - ./logic:/app
+      - ./storage/vector_db:/app/chroma_db
+      - ./data_pipeline:/app/data_pipeline     # Lisa see
       - ./storage:/app/storage
     restart: always
 
@@ -42,7 +46,7 @@ services:
     command: uvicorn api:app --host 0.0.0.0 --port 8000
     volumes:
       - ./logic:/app
-      - ./storage:/app/storage
+      - ./storage/vector_db:/app/chroma_db
     ports:
       - "8000:8000"
     depends_on:
