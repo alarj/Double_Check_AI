@@ -13,6 +13,7 @@ DB_PATH = "/app/storage/vector_db"
 INGEST_LOG_FILE = "/app/storage/ingest.log"
 OLLAMA_URL = "http://ollama:11434"
 EMBED_MODEL = "bge-m3"
+MAX_CHUNK_CHARS = 800  # Turvaline piir bge-m3 ja mxbai jaoks
 
 # --- ANDMEBAASI ÜHENDUS ---
 embedding_func = embedding_functions.OllamaEmbeddingFunction(
@@ -27,7 +28,7 @@ collection = client.get_or_create_collection(
 )
 
 def log_ingest_event(doc_type, event_name, details):
-    """Salvestab impordi sündmused eraldi logifaili."""
+    """Salvestab impordi sündmused JSON logifaili."""
     try:
         log_entry = {
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -43,10 +44,25 @@ def log_ingest_event(doc_type, event_name, details):
 def strip_ns(tag):
     return tag.split('}')[-1] if '}' in tag else tag
 
+def get_clean_text(element):
+    """Võtab elemendi vahetu teksti ilma sügavate järglasteta, et hoida struktuuri."""
+    if element is None: return ""
+    # Otsime tavateksti või sisuTeksti elemente
+    tava = element.find(".//{*}tavatekst")
+    if tava is not None and tava.text: return tava.text.strip()
+    
+    sisu = element.find(".//{*}sisuTekst")
+    if sisu is not None:
+        return "".join(sisu.itertext()).strip()
+        
+    return (element.text or "").strip()
+
 def parse_xml_to_legal_chunks(file_path):
     """
-    Parsib XML-i, tuvastab liigi ja otsib volitusinfot (seost seadusega) 
-    nii volitusnormi märgendist kui ka preambulast.
+    Kõrgema kvaliteediga parsimine: 
+    - Eraldi metadata lõigete ja punktide jaoks.
+    - Volitusnormi kaasamine teksti (embeddingu jaoks).
+    - Max pikkuse kontroll.
     """
     chunks = []
     metadatas = []
@@ -56,95 +72,86 @@ def parse_xml_to_legal_chunks(file_path):
         tree = ET.parse(file_path)
         root = tree.getroot()
         
-        # 1. Dokumendi liik (seadus, määrus jne)
+        # 1. Dokumendi liik ja volitus
         doc_type_val = "muu dokument"
         doc_type_elem = root.find(".//{*}dokumentLiik")
         if doc_type_elem is not None and doc_type_elem.text:
             doc_type_val = doc_type_elem.text.strip().lower()
         
-        doc_type_display = doc_type_val.upper()
-
-        # 2. Volitusinfo otsimine (Määruste puhul oluline seos seadusega)
         volitus = ""
-        # Variant A: Spetsiaalne märgend
-        volitus_elem = root.find(".//{*}volitusnorm")
-        if volitus_elem is not None:
-            volitus = "".join(volitus_elem.itertext()).strip()
+        v_elem = root.find(".//{*}volitusnorm") or root.find(".//{*}preambul")
+        if v_elem is not None:
+            volitus = re.sub(r'\s+', ' ', "".join(v_elem.itertext())).strip()
         
-        # Variant B: Preambul (Sinu failis 115082017003.akt on info siin)
-        if not volitus:
-            preambul_elem = root.find(".//{*}preambul")
-            if preambul_elem is not None:
-                volitus = "".join(preambul_elem.itertext()).strip()
-                # Puhastame liigse tühja ja reavahetused
-                volitus = re.sub(r'\s+', ' ', volitus).strip()
+        # Volituse lühiversioon teksti sisse sulgudesse panemiseks
+        volitus_context = f"({volitus[:100]}...)" if volitus else ""
 
-        # 3. Viide/lühend (nt RHS)
-        law_abbr = ""
+        # 2. Seaduse lühend (garanteeritud)
+        law_abbr = "AKT"
         lyhend_elem = root.find(".//{*}lyhend")
         if lyhend_elem is not None and lyhend_elem.text:
-            law_abbr = lyhend_elem.text
-        
-        if not law_abbr:
-            valjaandja = root.find(".//{*}valjaandja")
-            akti_nr = root.find(".//{*}aktiNr")
-            if valjaandja is not None and akti_nr is not None:
-                law_abbr = f"{valjaandja.text} {doc_type_val} nr {akti_nr.text}"
-            else:
-                law_abbr = doc_type_val.capitalize()
+            law_abbr = lyhend_elem.text.strip()
+        else:
+            vja = root.find(".//{*}valjaandja")
+            anr = root.find(".//{*}aktiNr")
+            if vja is not None and anr is not None:
+                law_abbr = f"{vja.text} {doc_type_val} nr {anr.text}"
 
-        # 4. Parsime sisu paragrahvi tasemel
+        # 3. Parsime paragrahvid
         for para in root.findall(".//{*}paragrahv"):
-            para_nr = ""
-            para_nr_elem = para.find("{*}paragrahvNr")
-            if para_nr_elem is not None:
-                para_nr = para_nr_elem.text
+            para_nr = (para.find("{*}paragrahvNr").text or "") if para.find("{*}paragrahvNr") is not None else ""
             
-            def create_meta(prefix):
+            def create_meta(display_prefix, lg="", p=""):
                 m = {
-                    "source": prefix, 
-                    "file": filename, 
+                    "display_name": display_prefix,
+                    "file": filename,
                     "section": str(para_nr),
+                    "subsection": str(lg),
+                    "point": str(p),
                     "type": doc_type_val
                 }
-                if volitus: m["volitus"] = volitus[:250] # Salvestame seose alusega
+                if volitus: m["volitus"] = volitus[:250]
                 return m
 
             loiked = para.findall(".//{*}loige")
+            
             if not loiked:
-                content = "".join(para.itertext()).strip()
+                content = get_clean_text(para)
                 if content:
                     prefix = f"{law_abbr} § {para_nr}"
-                    chunks.append(f"[{doc_type_display}] {prefix}: {content}")
+                    text = f"[{doc_type_val.upper()}] {prefix} {volitus_context}: {content}"[:MAX_CHUNK_CHARS]
+                    chunks.append(text)
                     metadatas.append(create_meta(prefix))
             else:
                 for lg in loiked:
-                    lg_nr = ""
-                    lg_nr_elem = lg.find("{*}loigeNr")
-                    if lg_nr_elem is not None:
-                        lg_nr = lg_nr_elem.text
-                    
+                    lg_nr = (lg.find("{*}loigeNr").text or "") if lg.find("{*}loigeNr") is not None else ""
                     punktid = lg.findall(".//{*}alapunkt")
+                    
                     if not punktid:
-                        content = "".join(lg.itertext()).strip()
+                        content = get_clean_text(lg)
                         if content:
                             prefix = f"{law_abbr} § {para_nr} lg {lg_nr}"
-                            chunks.append(f"[{doc_type_display}] {prefix}: {content}")
-                            metadatas.append(create_meta(prefix))
+                            text = f"[{doc_type_val.upper()}] {prefix} {volitus_context}: {content}"[:MAX_CHUNK_CHARS]
+                            chunks.append(text)
+                            metadatas.append(create_meta(prefix, lg=lg_nr))
                     else:
+                        # Intro tekst (punktide sissejuhatus)
                         intro = ""
                         for child in lg:
                             if strip_ns(child.tag) == "alapunkt": break
                             intro += "".join(child.itertext())
-                        
+                        intro = intro.strip()
+
                         for p in punktid:
-                            p_nr = ""
-                            p_nr_elem = p.find("{*}alapunktNr")
-                            if p_nr_elem is not None: p_nr = p_nr_elem.text
-                            p_content = "".join(p.itertext()).strip()
-                            prefix = f"{law_abbr} § {para_nr} lg {lg_nr} p {p_nr}"
-                            chunks.append(f"[{doc_type_display}] {prefix}: {intro.strip()} {p_content}")
-                            metadatas.append(create_meta(prefix))
+                            p_nr = (p.find("{*}alapunktNr").text or "") if p.find("{*}alapunktNr") is not None else ""
+                            p_content = get_clean_text(p)
+                            if p_content:
+                                prefix = f"{law_abbr} § {para_nr} lg {lg_nr} p {p_nr}"
+                                # Lisame intro ainult juhul kui see pole liiga pikk
+                                full_content = f"{intro} {p_content}" if len(intro) < 200 else p_content
+                                text = f"[{doc_type_val.upper()}] {prefix} {volitus_context}: {full_content}"[:MAX_CHUNK_CHARS]
+                                chunks.append(text)
+                                metadatas.append(create_meta(prefix, lg=lg_nr, p=p_nr))
                             
         return chunks, metadatas, doc_type_val
     except Exception as e:
@@ -153,7 +160,7 @@ def parse_xml_to_legal_chunks(file_path):
 
 def run_ingest():
     start_time = datetime.now()
-    print(f"\n🚀 STRUKTUURNE IMPORT | DOKUMENDI LIIGID JA VOLITUSED")
+    print(f"\n🚀 PRODUCTION-READY INGEST | Mudel: {EMBED_MODEL}")
     
     if not os.path.exists(LAWS_DIR):
         print(f"❌ VIGA: Kataloogi {LAWS_DIR} ei eksisteeri!")
@@ -167,6 +174,7 @@ def run_ingest():
     type_counts = {}
 
     for filename in files:
+        # Kontrollime, kas fail on juba imporditud
         existing = collection.get(where={"file": filename}, limit=1)
         if existing and existing['ids']:
             print(f"⏩ {filename} on juba olemas.")
@@ -177,30 +185,29 @@ def run_ingest():
         chunks, metas, doc_type = parse_xml_to_legal_chunks(path)
         
         if chunks:
-            print(f"📥 [{doc_type.upper()}] {filename}...", end=" ", flush=True)
-            batch_size = 20
+            print(f"📥 [{doc_type.upper()}] {filename} ({len(chunks)} osa)...", end=" ", flush=True)
+            # Kasutame väiksemat batchi kindluse mõttes
+            batch_size = 10
             for i in range(0, len(chunks), batch_size):
                 end = i + batch_size
                 collection.add(
                     documents=chunks[i:end],
-                    ids=[f"doc-{uuid.uuid4()}" for _ in chunks[i:end]],
+                    ids=[f"id-{uuid.uuid4()}" for _ in chunks[i:end]],
                     metadatas=metas[i:end]
                 )
             total_new_chunks += len(chunks)
             type_counts[doc_type] = type_counts.get(doc_type, 0) + 1
-            print(f"✅ {len(chunks)} osa lisatud.")
+            print(f"✅")
         else:
-            print(f"⚠️ Failis {filename} puudus struktuurne sisu.")
+            print(f"⚠️ Failis {filename} puudus sisu.")
 
-    duration = (datetime.now() - start_time).total_seconds()
+    duration = round((datetime.now() - start_time).total_seconds(), 2)
     log_ingest_event("SYSTEM", "IMPORT_FINISHED", {
         "new_chunks": total_new_chunks, 
-        "skipped_files": skipped_files,
-        "types_summary": type_counts,
-        "duration_sec": round(duration, 2)
+        "duration_sec": duration,
+        "types": type_counts
     })
-    
-    print(f"\n✨ VALMIS! Statistika: {type_counts}")
+    print(f"\n✨ IMPORT LÕPPES. Kestus: {duration}s. Kokku uusi osi: {total_new_chunks}")
 
 if __name__ == "__main__":
     run_ingest()
