@@ -8,16 +8,23 @@ import chromadb
 from chromadb.utils import embedding_functions
 
 # --- KONFIGURATSIOON ---
-OLLAMA_API_URL = "http://ollama:11434/api/generate"
+# Võtame URL-id keskkonnamuutujatest (kooskõlas docker-compose'iga)
+OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
+OLLAMA_API_URL = f"{OLLAMA_URL}/api/generate"
+# Täpne path vastavalt docker-compose volume'ile
 CHROMA_DB_PATH = "/app/storage/vector_db"
 PROMPTS_FILE = "/app/prompts.json"
 
 # --- ANDMEBAASI SEADISTAMINE ---
+# KRIITILINE: Sünkroonis sinu viimase 'bge-m3' ingestiga
+EMBEDDING_MODEL = "bge-m3"
+
 embedding_func = embedding_functions.OllamaEmbeddingFunction(
-    model_name="mxbai-embed-large",
-    url="http://ollama:11434"
+    model_name=EMBEDDING_MODEL,
+    url=OLLAMA_URL
 )
 
+# PersistentClient tagab ligipääsu salvestatud andmetele
 client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
 collection = client.get_or_create_collection(
     name="procurements", 
@@ -26,7 +33,7 @@ collection = client.get_or_create_collection(
 
 # --- PROMPTIDE LAADIMINE ---
 def load_prompts():
-    """Laeb süsteemipromptid JSON failist."""
+    """Laeb süsteemi juhised ja mallid JSON failist."""
     try:
         if os.path.exists(PROMPTS_FILE):
             with open(PROMPTS_FILE, "r", encoding="utf-8") as f:
@@ -36,99 +43,123 @@ def load_prompts():
         print(f"VIGA PROMPTIDE LAADIMISEL: {e}")
         return {}
 
+# Globaalne promptide objekt, mida main.py saab reaalajas kasutada
 PROMPTS = load_prompts()
 
-# --- ABIFUNKTSIOONID ---
+# --- ABI-FUNKTSIOONID ---
 
 def get_ee_time():
-    """Tagastab Eesti ajaobjekti."""
+    """Tagastab Eesti aja logimiseks."""
     return datetime.now(ZoneInfo("Europe/Tallinn"))
 
+def get_context(query, n_results=5):
+    """
+    Teostab RAG-otsingu koos hübriidse skoorimisega (Vektor + Märksõnad).
+    Optimeeritud bge-m3 distantsidele.
+    """
+    try:
+        # Küsime vektorbaasist kandidaadid
+        results = collection.query(query_texts=[query], n_results=n_results)
+        
+        if not results or not results['documents'] or not results['documents'][0]:
+            return ""
+
+        docs = results['documents'][0]
+        metas = results.get('metadatas', [[]])[0]
+        distances = results.get('distances', [[]])[0]
+        
+        query_words = re.findall(r'\w+', query.lower())
+        scored_docs = []
+        seen_snippets = set()
+        
+        for i, doc in enumerate(docs):
+            # Dublikaatide eemaldamine sisu alguse põhjal
+            snippet = doc[:100].strip().lower()
+            if snippet in seen_snippets: continue
+            seen_snippets.add(snippet)
+
+            # Skoorimine bge-m3 jaoks:
+            # L2 distants: 0 on identne. 1.4 on piirväärtus, millest edasi on seos nõrk.
+            v_score = max(0, 1.4 - distances[i])
+            
+            # Märksõnade täiendav kaal (Hübriidne otsing)
+            k_score = 0
+            doc_lower = doc.lower()
+            for word in query_words:
+                # Anname kaalu ainult sisulistele sõnadele
+                if len(word) > 4 and word in doc_lower:
+                    k_score += 0.4
+            
+            final_score = v_score + k_score
+            source = metas[i].get("source", "RHS") if metas else "RHS"
+            scored_docs.append((final_score, source, doc))
+
+        # Sorteerime tulemused lõpliku hübriidse skoori järgi
+        scored_docs.sort(key=lambda x: x[0], reverse=True)
+
+        # FAIL FAST lävend: bge-m3 puhul on 0.65-0.7 turvaline piir
+        # See hoiab ära hallutsinatsioonid tühja konteksti baasilt
+        if not scored_docs or scored_docs[0][0] < 0.65:
+            return ""
+
+        formatted_results = []
+        for sc, s, d in scored_docs[:3]:
+            formatted_results.append(f"--- ALLIKAS: {s} ---\n{d}")
+            
+        return "\n\n".join(formatted_results)
+        
+    except Exception as e:
+        print(f"VIGA konteksti loomisel: {e}")
+        return ""
+
 def ask_ollama(model, prompt, threads, timeout):
-    """Saadab päringu Ollama API-le."""
+    """Saadab päringu Ollama API-le genereerimiseks."""
     payload = {
         "model": model,
         "prompt": prompt,
         "stream": False,
         "options": {
-            "num_thread": threads,
+            "num_thread": int(threads),
             "num_predict": 1024,
-            "temperature": 0
+            "temperature": 0  # Deterministlik vastus on juriidikas kriitiline
         }
     }
+    
     try:
         response = requests.post(OLLAMA_API_URL, json=payload, timeout=timeout)
         if response.status_code == 200:
             return response.json().get("response", "")
-        return f"VIGA: Ollama API status {response.status_code}"
+        return f"VIGA: Ollama vastas koodiga {response.status_code}"
+    except requests.exceptions.Timeout:
+        return f"VIGA: Aegumine ({timeout}s)."
     except Exception as e:
-        return f"VIGA: {str(e)}"
-
-def get_context(query, n_results=8):
-    """Otsib VectorDB-st asjakohast konteksti."""
-    try:
-        results = collection.query(query_texts=[query], n_results=n_results)
-        docs = results['documents'][0]
-        metas = results.get('metadatas', [[]])[0]
-        
-        query_parts = re.findall(r'\w+', query.lower())
-        scored_docs = []
-        seen_content = set()
-        
-        for i, doc in enumerate(docs):
-            snippet = doc[:200].strip().lower()
-            if snippet in seen_content:
-                continue
-            seen_content.add(snippet)
-
-            score = 0
-            doc_lower = doc.lower()
-            for part in query_parts:
-                if len(part) > 5:
-                    score += 2 * doc_lower.count(part)
-                elif len(part) > 3:
-                    score += doc_lower.count(part)
-            
-            source = metas[i].get("source", "Teadmata") if metas else "Teadmata"
-            scored_docs.append((score, source, doc))
-
-        scored_docs.sort(key=lambda x: x[0], reverse=True)
-
-        # Fail fast: kui skoor on liiga madal, tagastame tühja stringi.
-        # See annab main.py-le märku, et vastust pole mõtet genereerida.
-        if not scored_docs or scored_docs[0][0] < 2:
-            return ""
-
-        context_parts = []
-        for score, source, doc in scored_docs[:3]:
-            context_parts.append(f"[ALLIKAS: {source}]\n{doc}")
-
-        return "\n\n".join(context_parts)
-    except Exception as e:
-        print(f"VIGA KONTEKSTI OTSIMISEL: {e}")
-        return ""
+        return f"VIGA: Sidekatkestus - {str(e)}"
 
 def parse_json_res(raw_res):
     """
-    Turvaline JSON-i eraldamine ja parsimine tekstist ilma regex-ita.
-    See meetod on immuunne süsteemi Markdowni tõrgetele.
+    Robustne JSON parsimine tekstist.
+    Eemaldab võimalikud Markdowni koodiplokid ja prügi ümber JSON-i.
     """
-    try:
-        clean_res = raw_res.strip()
-        start_idx = clean_res.find('{')
-        end_idx = clean_res.rfind('}')
+    if not raw_res: 
+        return {}
         
-        if start_idx != -1 and end_idx != -1:
-            json_str = clean_res[start_idx:end_idx + 1]
+    try:
+        text = str(raw_res).strip()
+        
+        # Otsime üles esimese '{' ja viimase '}'
+        start = text.find('{')
+        end = text.rfind('}') + 1
+        
+        if start != -1 and end > 0:
+            json_str = text[start:end]
             return json.loads(json_str)
         
-        return json.loads(clean_res)
+        # Kui sulge ei leitud, proovime parsida tervet teksti
+        return json.loads(text)
     except Exception:
         return {}
 
 def parse_pre_check(raw_res):
-    """Parsib eelkontrolli vastuse."""
+    """Eraldab eelkontrolli staatuse ja normaliseeritud päringu."""
     data = parse_json_res(raw_res)
-    status = data.get("status", "BLOCKED")
-    normalized = data.get("normalized_query", "")
-    return status, normalized
+    return data.get("status", "BLOCKED"), data.get("normalized_query", "")
