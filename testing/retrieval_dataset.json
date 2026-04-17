@@ -1,0 +1,52 @@
+[
+  {
+    "question": "kes kinnitab hanke tulemuse?",
+    "expected_section": "117"
+  },
+  {
+    "question": "mille alusel valitakse edukas pakkumus?",
+    "expected_section": "50"
+  },
+  {
+    "question": "kuidas pakkumus esitatakse?",
+    "expected_section": "111"
+  },
+  {
+    "question": "millal võib kõik pakkumused tagasi lükata?",
+    "expected_section": "116"
+  },
+  {
+    "question": "mis on majanduslikult soodsaim pakkumus?",
+    "expected_section": "50"
+  },
+  {
+    "question": "mis juhtub kui edukas pakkuja ei sõlmi lepingut?",
+    "expected_section": "117"
+  },
+  {
+    "question": "mis on pakkumuse esitamise nõuded?",
+    "expected_section": "111"
+  },
+  {
+    "question": "kas hankija peab põhjendama pakkumuse tagasilükkamist?",
+    "expected_section": "50"
+  },
+  {
+    "question": "mitu kängurut elab Austraalias?",
+    "expected_section": null,
+    "type": "out_of_domain"
+  },
+  {
+    "question": "kes on Rootsi kuningas?",
+    "expected_section": null,
+    "type": "out_of_domain"
+  },
+  {
+    "question": "mis on hankemenetluse lõppemise alused?",
+    "expected_section": "116"
+  },
+  {
+    "question": "millal loetakse pakkumus siduvaks?",
+    "expected_section": "110"
+  }
+]

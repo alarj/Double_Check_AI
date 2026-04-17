@@ -197,6 +197,12 @@ def run_ingest():
                 )
             total_new_chunks += len(chunks)
             type_counts[doc_type] = type_counts.get(doc_type, 0) + 1
+            
+            # Logime faili eduka impordi
+            log_ingest_event(doc_type, "FILE_IMPORTED", {
+                "file": filename, 
+                "chunks": len(chunks)
+            })
             print(f"✅")
         else:
             print(f"⚠️ Failis {filename} puudus sisu.")
@@ -205,7 +211,8 @@ def run_ingest():
     log_ingest_event("SYSTEM", "IMPORT_FINISHED", {
         "new_chunks": total_new_chunks, 
         "duration_sec": duration,
-        "types": type_counts
+        "types": type_counts,
+        "skipped": skipped_files
     })
     print(f"\n✨ IMPORT LÕPPES. Kestus: {duration}s. Kokku uusi osi: {total_new_chunks}")
 

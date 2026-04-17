@@ -1,0 +1,44 @@
+[
+  {
+    "question": "kes kinnitab hanke tulemuse?",
+    "context": "§ 117. Hankija tunnistab pakkumuse edukaks...",
+    "answer": "Hanke tulemuse kinnitab hankija.",
+    "expected_status": "ALLOWED"
+  },
+  {
+    "question": "kes kinnitab hanke tulemuse?",
+    "context": "§ 117. Hankija tunnistab pakkumuse edukaks...",
+    "answer": "Hanke tulemuse kinnitab kohus.",
+    "expected_status": "BLOCKED"
+  },
+  {
+    "question": "millal võib kõik pakkumused tagasi lükata?",
+    "context": "§ 116. Hankija võib põhjendatud juhul kõik pakkumused tagasi lükata.",
+    "answer": "Hankija võib alati kõik pakkumused tagasi lükata.",
+    "expected_status": "BLOCKED"
+  },
+  {
+    "question": "kuidas pakkumus esitatakse?",
+    "context": "§ 111. Pakkumus esitatakse elektrooniliselt.",
+    "answer": "Pakkumus esitatakse elektrooniliselt.",
+    "expected_status": "ALLOWED"
+  },
+  {
+    "question": "kuidas pakkumus esitatakse?",
+    "context": "§ 111. Pakkumus esitatakse elektrooniliselt.",
+    "answer": "Pakkumus võib esitada suuliselt.",
+    "expected_status": "BLOCKED"
+  },
+  {
+    "question": "mis on pakkumus?",
+    "context": "",
+    "answer": "Pakkumus on siduv ettepanek lepingu sõlmimiseks.",
+    "expected_status": "BLOCKED"
+  },
+  {
+    "question": "mis on pakkumus?",
+    "context": "§ 110. Pakkumus on siduv ettepanek lepingu sõlmimiseks.",
+    "answer": "Pakkumus on siduv ettepanek lepingu sõlmimiseks.",
+    "expected_status": "ALLOWED"
+  }
+]

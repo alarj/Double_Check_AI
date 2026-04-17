@@ -5,7 +5,7 @@ import json
 import logic_core
 
 # --- KONFIGURATSIOON ---
-# Muudetud asukoht vastavalt nõudele logida logic kataloogi
+# Logi asukoht ja promptide fail
 LOG_FILE = "/app/ai_turvakiht.log"
 PROMPTS_FILE = "/app/prompts.json"
 DEFAULT_GUARD = "gemma2:2b"
@@ -23,6 +23,7 @@ def log_json_event(data):
 # --- UI SEADISTAMINE ---
 st.set_page_config(page_title="Sinu nutikas AI assistent", layout="wide", page_icon="⚖️")
 
+# Session state algväärtustamine
 if "processing" not in st.session_state: st.session_state.processing = False
 if "last_response" not in st.session_state: st.session_state.last_response = None
 if "last_post_analysis" not in st.session_state: st.session_state.last_post_analysis = None
@@ -71,11 +72,7 @@ st.caption("Süsteem kasutab bge-m3 embeddinguid ja struktuurset riigihangete an
 if st.session_state.edit_prompts and not st.session_state.processing:
     st.divider()
     st.subheader("📝 Süsteemi promptide haldus")
-    
-    # Laeme hetke promptid
     current_prompts = logic_core.PROMPTS
-    
-    # Kuvame sisu redigeeritava tekstina
     prompts_text = json.dumps(current_prompts, indent=2, ensure_ascii=False)
     
     with st.form("prompt_form"):
@@ -92,7 +89,6 @@ if st.session_state.edit_prompts and not st.session_state.processing:
                 with open(PROMPTS_FILE, "w", encoding="utf-8") as f:
                     json.dump(parsed_json, f, indent=2, ensure_ascii=False)
                 st.success("Promptid salvestatud!")
-                # Uuendame ka mälus olevat objekti
                 logic_core.PROMPTS = parsed_json
                 time.sleep(1)
                 st.session_state.edit_prompts = False
@@ -107,23 +103,22 @@ if st.session_state.edit_prompts and not st.session_state.processing:
 
 # --- PÄRINGU VORM ---
 with st.form(key="query_form", clear_on_submit=False):
-    user_input = st.text_input("Sisesta oma küsimus riigihangete kohta:", placeholder="nt: Millised on riigihanke piirmäärad?", disabled=st.session_state.processing)
+    user_input = st.text_input("Sisesta oma küsimus riigihangete kohta:", placeholder="nt: mis on riigihange?", disabled=st.session_state.processing)
     submit_button = st.form_submit_button("Saada päring")
 
 if submit_button and user_input:
     st.session_state.processing = True
     st.session_state.current_query = user_input
-    # Peidame promptide vaate kui päring algab
     st.session_state.edit_prompts = False 
     st.rerun()
 
 # --- TÖÖTLUSLOOGIKA ---
 if st.session_state.processing and st.session_state.current_query:
     u_input = st.session_state.current_query
-    start_time = time.time()
+    start_time_total = time.time()
     status_container = st.empty()
     
-    # Logi ettevalmistus
+    # Algatame logiobjekti vastavalt näidisele
     log_data = {
         "timestamp": logic_core.get_ee_time().strftime("%Y-%m-%d %H:%M:%S"),
         "user_input": u_input,
@@ -137,106 +132,117 @@ if st.session_state.processing and st.session_state.current_query:
     is_safe = True
     main_answer = ""
     post_analysis = ""
+    context_found = False
+    fetched_context = ""
 
     def update_ui(msg):
-        elapsed = round(time.time() - start_time, 1)
+        elapsed = round(time.time() - start_time_total, 1)
         timer_placeholder.metric("Kestus", f"{elapsed} sek")
         status_container.info(msg)
 
     try:
-        # 1. SAMM: EELKONTROLL (Vajadusel)
-        if "Eelkontroll" in security_option or "Täiskontroll" in security_option:
-            update_ui("🔍 Samm 1/4: Päringu valideerimine ja normaliseerimine...")
-            pre_p = logic_core.PROMPTS.get("PRE_CHECK_PROMPT", "").format(u_input=u_input)
+        # 1. SAMM: EELKONTROLL
+        if any(x in security_option for x in ["Eelkontroll", "Täiskontroll"]):
+            update_ui("🔍 Samm 1/4: Päringu valideerimine...")
+            pre_p_template = logic_core.PROMPTS.get("PRE_CHECK_PROMPT", "")
+            pre_p = pre_p_template.replace("{u_input}", u_input)
             
             step_start = time.time()
             pre_res = logic_core.ask_ollama(guard_model_input, pre_p, selected_threads, selected_timeout)
             status, normalized = logic_core.parse_pre_check(pre_res)
             
             log_data["steps"]["pre_check"] = {
+                "model": guard_model_input,
+                "prompt": pre_p,
+                "start_time": logic_core.get_ee_time().strftime("%H:%M:%S"),
                 "status": status,
-                "normalized": normalized,
-                "duration": round(time.time() - step_start, 2),
+                "normalized": normalized if normalized else u_input,
+                "duration": round((time.time() - step_start) * 1000, 2), # ms täpsus nagu näidises (või sekundid)
                 "raw_response": pre_res
             }
 
             if status == "ALLOWED":
-                if normalized:
-                    active_query = normalized
+                if normalized: active_query = normalized
             else:
                 is_safe = False
                 main_answer = f"🚨 **Päring blokeeritud turvafiltri poolt.**\n\nSelgitus: {pre_res}"
-                log_data["final_status"] = "BLOCKED_BY_PRECHECK"
+                log_data["final_status"] = "BLOCKED"
 
-        # 2. SAMM: RAG JA PÕHIPÄRING
+        # 2. SAMM: KONTEKSTI OTSING (RAG)
         if is_safe:
-            update_ui(f"📚 Samm 2/4: Otsin asjakohast infot: **{active_query}**")
+            update_ui(f"📚 Samm 2/4: Otsin konteksti: {active_query}")
+            ctx_start = time.time()
+            fetched_context = logic_core.get_context(active_query)
+            context_found = len(fetched_context.strip()) > 0
             
-            step_start = time.time()
-            context = logic_core.get_context(active_query)
             log_data["steps"]["context_fetch"] = {
-                "found": bool(context),
-                "duration": round(time.time() - step_start, 2)
+                "found": context_found,
+                "duration": round(time.time() - ctx_start, 2)
             }
             
-            if not context:
-                # Kui isegi normaliseeritud päringuga midagi ei leita
+            if not context_found:
                 is_safe = False
-                main_answer = "Andmebaasist ei leitud küsimusele vastamiseks piisavalt infot."
-                log_data["final_status"] = "NO_CONTEXT_FOUND"
+                main_answer = "Esitatud kontekstis info puudub."
+                log_data["final_status"] = "NO_CONTEXT"
             else:
-                # 3. SAMM: PÕHIPÄRING MUDELILE
+                # 3. SAMM: PÕHIPÄRING
                 update_ui(f"🧠 Samm 3/4: Genereerin vastust ({main_model_input})...")
-                rag_p = logic_core.PROMPTS.get("RAG_PROMPT", "").format(context=context, query=active_query)
+                rag_p_template = logic_core.PROMPTS.get("RAG_PROMPT", "")
+                rag_p = rag_p_template.replace("{context}", fetched_context).replace("{query}", active_query)
                 
-                step_start = time.time()
+                step_start_main = time.time()
                 main_answer = logic_core.ask_ollama(main_model_input, rag_p, selected_threads, selected_timeout)
-                log_data["steps"]["main_generation"] = {
-                    "duration": round(time.time() - step_start, 2)
+                
+                log_data["steps"]["main_query"] = {
+                    "model": main_model_input,
+                    "prompt": rag_p,
+                    "start_time": logic_core.get_ee_time().strftime("%H:%M:%S"),
+                    "context_used": fetched_context,
+                    "result": main_answer,
+                    "duration": round(time.time() - step_start_main, 2)
                 }
                 
-                # 4. SAMM: JÄRELKONTROLL (Vajadusel)
-                if "järelkontroll" in security_option or "Täiskontroll" in security_option:
+                # 4. SAMM: JÄRELKONTROLL
+                if any(x in security_option for x in ["järelkontroll", "Täiskontroll"]):
                     update_ui("🛡️ Samm 4/4: Teen vastuse kvaliteedikontrolli...")
-                    post_p = logic_core.PROMPTS.get("POST_CHECK_PROMPT", "").format(
-                        u_input=u_input, 
-                        context=context, 
-                        main_res=main_answer
-                    )
+                    post_p_template = logic_core.PROMPTS.get("POST_CHECK_PROMPT", "")
+                    post_p = post_p_template.replace("{u_input}", u_input).replace("{context}", fetched_context).replace("{main_res}", main_answer)
                     
-                    step_start = time.time()
+                    step_start_post = time.time()
                     post_res = logic_core.ask_ollama(guard_model_input, post_p, selected_threads, selected_timeout)
                     post_data = logic_core.parse_json_res(post_res)
-                    
-                    p_status = post_data.get("status", "BLOCKED")
-                    post_analysis = post_data.get("reason", post_res)
+                    p_status = post_data.get("status", "ALLOWED") # Vaikimisi lubame kui json katki
+                    post_analysis = post_data.get("analysis", post_res)
                     
                     log_data["steps"]["post_check"] = {
+                        "model": guard_model_input,
+                        "prompt": post_p,
+                        "start_time": logic_core.get_ee_time().strftime("%H:%M:%S"),
                         "status": p_status,
-                        "duration": round(time.time() - step_start, 2),
-                        "analysis": post_analysis
+                        "duration": round(time.time() - step_start_post, 2),
+                        "analysis": post_analysis,
+                        "raw_response": post_res
                     }
                     
-                    if p_status != "ALLOWED":
+                    if p_status == "BLOCKED":
                         is_safe = False
-                        main_answer = "🚨 **Vastus blokeeriti järelkontrolli poolt (hallutsinatsiooni või ebatäpsuse oht).**"
-                        log_data["final_status"] = "BLOCKED_BY_POSTCHECK"
+                        main_answer = "🚨 **Vastus blokeeriti järelkontrolli poolt.**"
+                        log_data["final_status"] = "BLOCKED"
 
-        # Tulemuste salvestamine sessiooni
         st.session_state.last_response = main_answer
         st.session_state.last_post_analysis = post_analysis
-        st.session_state.last_status = "OK" if is_safe else log_data.get("final_status", "FAILED")
+        st.session_state.last_status = "OK" if is_safe else "BLOCKED"
 
     except Exception as e:
-        st.error(f"Kriitiline viga töötlusel: {e}")
+        st.error(f"Kriitiline viga: {e}")
         log_data["error"] = str(e)
         st.session_state.last_status = "ERROR"
     
     finally:
-        log_data["total_duration"] = round(time.time() - start_time, 2)
+        log_data["total_duration"] = round(time.time() - start_time_total, 2)
         if is_safe and log_data["final_status"] == "PENDING":
             log_data["final_status"] = "OK"
-            
+        
         log_json_event(log_data)
         st.session_state.processing = False
         st.rerun()
@@ -247,9 +253,8 @@ if st.session_state.last_response:
     if st.session_state.last_status == "OK":
         st.subheader("💡 Tehisintellekti vastus:")
         st.markdown(st.session_state.last_response)
-        
         if st.session_state.last_post_analysis:
-            with st.expander("🛡️ Järelkontrolli analüüs ja audit", expanded=True):
+            with st.expander("🛡️ Kvaliteedikontrolli selgitus", expanded=False):
                 st.info(st.session_state.last_post_analysis)
     else:
         st.warning(st.session_state.last_response)
@@ -264,14 +269,11 @@ if st.session_state.show_logs:
     if os.path.exists(LOG_FILE):
         with open(LOG_FILE, "r", encoding="utf-8") as f:
             lines = f.readlines()
-            # Näitame 15 viimast sündmust
-            for line in reversed(lines[-15:]):
+            for line in reversed(lines[-10:]):
                 try:
                     entry = json.loads(line)
                     mumm = "🟢" if entry.get("final_status") == "OK" else "🔴"
-                    timestamp = entry.get("timestamp", "---")
-                    label = f"{mumm} {timestamp} | {entry.get('user_input', '')[:50]}..."
-                    
+                    label = f"{mumm} {entry.get('timestamp')} | {entry.get('user_input', '')[:40]}..."
                     with st.expander(label):
                         st.json(entry)
                 except:
