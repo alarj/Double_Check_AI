@@ -12,18 +12,6 @@ services:
     # See rida garanteerib, et kõik vajalikud mudelid tõmmatakse automaatselt käivitamisel
     entrypoint: /bin/sh -c "ollama serve & sleep 10 && ollama pull llama3:8b && ollama pull gemma2:2b && ollama pull mistral && ollama pull phi3 && ollama pull mxbai-embed-large && ollama pull bge-m3 && wait"
 
-  api:
-    build: ./api
-    container_name: api-service
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./api:/app
-    environment:
-      - OLLAMA_BASE_URL=http://ollama:11434
-    depends_on:
-      - ollama
-
   logic-app:
     build: ./logic
     container_name: logic-app
@@ -47,6 +35,24 @@ services:
       - ./storage/vector_db:/app/chroma_db
       - ./data_pipeline:/app/data_pipeline
       - ./storage:/app/storage
+    restart: always  
+
+  api:
+    build: ./logic
+    container_name: logic-api
+    working_dir: /app
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+    command: uvicorn api:app --host 0.0.0.0 --port 8000
+    volumes:
+      - ./logic:/app
+      - ./storage/vector_db:/app/chroma_db
+    ports:
+      - "8000:8000"
+    depends_on:
+      - ollama
+    restart: always
+
 
   test-app:
     build: ./logic
@@ -61,7 +67,9 @@ services:
     volumes:
       - ./logic:/app
       - ./data_pipeline:/app/data_pipeline
+      - ./testing:/testing  # <--- SEE RIDA ÜHENDAB TESTID
       - ./storage:/app/storage
+    restart: always  
 
 volumes:
   ollama_data:

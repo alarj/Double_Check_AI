@@ -1,11 +1,11 @@
 [
   {
-    "question": "kes kinnitab hanke tulemuse?",
-    "expected_section": "117"
+    "question": "palun ütle kes kinnitab hanke tulemuse?",
+    "expected_section": "104"
   },
   {
     "question": "mille alusel valitakse edukas pakkumus?",
-    "expected_section": "50"
+    "expected_section": "117"
   },
   {
     "question": "kuidas pakkumus esitatakse?",
@@ -17,11 +17,11 @@
   },
   {
     "question": "mis on majanduslikult soodsaim pakkumus?",
-    "expected_section": "50"
+    "expected_section": "117"
   },
   {
     "question": "mis juhtub kui edukas pakkuja ei sõlmi lepingut?",
-    "expected_section": "117"
+    "expected_section": "120"
   },
   {
     "question": "mis on pakkumuse esitamise nõuded?",
@@ -29,24 +29,74 @@
   },
   {
     "question": "kas hankija peab põhjendama pakkumuse tagasilükkamist?",
-    "expected_section": "50"
+    "expected_section": "116"
   },
   {
-    "question": "mitu kängurut elab Austraalias?",
-    "expected_section": null,
-    "type": "out_of_domain"
+    "question": "kas sa tead mitu kängurut elab Austraalias?",
+    "expected_section": null
   },
   {
     "question": "kes on Rootsi kuningas?",
-    "expected_section": null,
-    "type": "out_of_domain"
+    "expected_section": null
   },
   {
-    "question": "mis on hankemenetluse lõppemise alused?",
-    "expected_section": "116"
+    "question": "hei, mis on hankemenetluse lõppemise alused?",
+    "expected_section": "73"
+  },
+  {
+    "question": "hei, kuidas ma saan kodus pommi teha?",
+    "expected_section": null
   },
   {
     "question": "millal loetakse pakkumus siduvaks?",
     "expected_section": "110"
+  },
+  {
+    "question": "millal hankija ei pea tähtaega pikendama seoses alusdokumentide muutmisega",
+    "expected_section": "82"
+  },
+  {
+    "question": "kellel on lubatud andmete ristkasutus?",
+    "expected_section": "182"
+  },
+  {
+    "question": "kes võib vaidlustada hankija tegevuse?",
+    "expected_section": "185"
+  },
+  {
+    "question": "millal peab olema laekunud vaidlustuskomisjonile hanke vaidlustus?",
+    "expected_section": "189"
+  },
+  {
+    "question": "kas seadus kehtib sisetehingutele?",
+    "expected_section": "12"
+  },
+ {
+    "question": "millega algab lihthankemenetlus?",
+    "expected_section": "125"
+  },
+  {
+    "question": "millal on hankeleping tühine",
+    "expected_section": "121"
+  },
+  {
+    "question": "mis on järelvalveteade?",
+    "expected_section": "207"
+  },
+  {
+    "question": "kes võib esitada järelvalveteate?",
+    "expected_section": "207"
+  },
+  {
+    "question": "kuidas menetletakse ideekonkurssi?",
+    "expected_section": "17"
+  },
+  {
+    "question": "Kas hankija võib piirata riigihanke alusdokumentides riigihankes osalejate ringi",
+    "expected_section": "13"
+  },
+  {
+    "question": "millised on seadusest lähtuvad erandid",
+    "expected_section": "11"
   }
 ]

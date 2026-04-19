@@ -1,0 +1,310 @@
+[
+  {
+    "timestamp": "2026-04-17 23:02:49",
+    "question": "palun ütle kes kinnitab hanke tulemuse?",
+    "expected_section": "104",
+    "found": true,
+    "rank": 3,
+    "latency_sec": 2.443,
+    "sources_returned": [
+      "RHS ---\n[SEADUS] RHS § 83 lg 3 : Keskse riigihanke või ühishanke puhul märgib riigihanget läbi viiv ...",
+      "RHS ---\n[SEADUS] RHS § 72 lg 6 : Kui hankemenetluses osaleb mitu pakkujat, teeb hankija pakkumuse ed...",
+      "RHS ---\n[SEADUS] RHS § 104 lg 8 : Enne hankelepingu sõlmimist nõuab hankija edukalt pakkujalt kõikid..."
+    ],
+    "raw_context_preview": "--- ALLIKAS: RHS ---\n[SEADUS] RHS § 83 lg 3 : Keskse riigihanke või ühishanke puhul märgib riigihanget läbi viiv hankija hankelepingu sõlmimise teatele nende hankijate nimed, kes vastava riigihanke tu..."
+  },
+  {
+    "timestamp": "2026-04-17 23:02:49",
+    "question": "mille alusel valitakse edukas pakkumus?",
+    "expected_section": "117",
+    "found": true,
+    "rank": 1,
+    "latency_sec": 0.263,
+    "sources_returned": [
+      "RHS ---\n[SEADUS] RHS § 119 lg 1 : Kui edukas pakkuja ei allkirjasta hankija antud tähtaja jooksul ha...",
+      "RHS ---\n[SEADUS] RHS § 117 lg 1 : Hankija hindab vastavaks tunnistatud pakkumusi vastavalt riigihank...",
+      "RHS ---\n[SEADUS] RHS § 72 lg 6 : Kui hankemenetluses osaleb mitu pakkujat, teeb hankija pakkumuse ed..."
+    ],
+    "raw_context_preview": "--- ALLIKAS: RHS ---\n[SEADUS] RHS § 119 lg 1 : Kui edukas pakkuja ei allkirjasta hankija antud tähtaja jooksul hankelepingut või ei asu nõustumuse andmisega sõlmitud hankelepingut endast tulenevatel p..."
+  },
+  {
+    "timestamp": "2026-04-17 23:02:49",
+    "question": "kuidas pakkumus esitatakse?",
+    "expected_section": "111",
+    "found": true,
+    "rank": 1,
+    "latency_sec": 0.263,
+    "sources_returned": [
+      "RHS ---\n[SEADUS] RHS § 111 lg 1 : Pakkumus esitatakse hankijale kirjalikku taasesitamist võimaldavas...",
+      "RHS ---\n[SEADUS] RHS § 55 lg 1 : Hankija teeb igale kvalifitseeritud taotlejale, või juhul kui ta on...",
+      "RHS ---\n[SEADUS] RHS § 110 lg 1 : Pakkumus on pakkuja tahteavaldus hankelepingu sõlmimiseks, mis on ..."
+    ],
+    "raw_context_preview": "--- ALLIKAS: RHS ---\n[SEADUS] RHS § 111 lg 1 : Pakkumus esitatakse hankijale kirjalikku taasesitamist võimaldavas vormis vastavalt käesolevas seaduses ja selle alusel kehtestatud õigusaktides sätestat..."
+  },
+  {
+    "timestamp": "2026-04-17 23:02:50",
+    "question": "millal võib kõik pakkumused tagasi lükata?",
+    "expected_section": "116",
+    "found": true,
+    "rank": 2,
+    "latency_sec": 0.279,
+    "sources_returned": [
+      "RHS ---\n[SEADUS] RHS § 111 lg 3 : Pakkuja võib pakkumuse enne pakkumuste esitamise tähtpäeva tagasi ...",
+      "RHS ---\n[SEADUS] RHS § 116 lg 1 : Hankija võib teha põhjendatud kirjaliku otsuse kõigi pakkumuste ta...",
+      "RHS ---\n[SEADUS] RHS § 202 lg 3 : Kui hankija, vaidlustuskomisjon või Rahandusministeerium jätab kah..."
+    ],
+    "raw_context_preview": "--- ALLIKAS: RHS ---\n[SEADUS] RHS § 111 lg 3 : Pakkuja võib pakkumuse enne pakkumuste esitamise tähtpäeva tagasi võtta. Kui pakkumus või selle osa ei ole esitatud elektrooniliselt, esitab pakkuja pakk..."
+  },
+  {
+    "timestamp": "2026-04-17 23:02:50",
+    "question": "mis on majanduslikult soodsaim pakkumus?",
+    "expected_section": "117",
+    "found": false,
+    "rank": null,
+    "latency_sec": 0.274,
+    "sources_returned": [
+      "RHS ---\n[SEADUS] RHS § 85 lg 3 : Majanduslikult soodsaima pakkumuse väljaselgitamisel võtab hankija ...",
+      "RHS ---\n[SEADUS] RHS § 85 lg 4 : Hankija võib majanduslikult soodsaima pakkumuse väljaselgitamisel a...",
+      "RHS ---\n[SEADUS] RHS § 85 lg 5 : Innovatsioonipartnerluses ja võistlevas dialoogis arvestab hankija ..."
+    ],
+    "raw_context_preview": "--- ALLIKAS: RHS ---\n[SEADUS] RHS § 85 lg 3 : Majanduslikult soodsaima pakkumuse väljaselgitamisel võtab hankija arvesse eelkõige parimat hinna ja kvaliteedi suhet, mis hõlmab kvalitatiivseid, keskkon..."
+  },
+  {
+    "timestamp": "2026-04-17 23:02:50",
+    "question": "mis juhtub kui edukas pakkuja ei sõlmi lepingut?",
+    "expected_section": "120",
+    "found": false,
+    "rank": null,
+    "latency_sec": 0.291,
+    "sources_returned": [
+      "RHS ---\n[SEADUS] RHS § 119 lg 1 : Kui edukas pakkuja ei allkirjasta hankija antud tähtaja jooksul ha...",
+      "RHS ---\n[SEADUS] RHS § 91 lg 1 : Hankija ei tagasta pakkumuse tagatist edukale pakkujale või realise...",
+      "RHS ---\n[SEADUS] RHS § 117 lg 4 : Hankija võib otsustada mitte sõlmida hankelepingut eduka pakkujaga..."
+    ],
+    "raw_context_preview": "--- ALLIKAS: RHS ---\n[SEADUS] RHS § 119 lg 1 : Kui edukas pakkuja ei allkirjasta hankija antud tähtaja jooksul hankelepingut või ei asu nõustumuse andmisega sõlmitud hankelepingut endast tulenevatel p..."
+  },
+  {
+    "timestamp": "2026-04-17 23:02:50",
+    "question": "mis on pakkumuse esitamise nõuded?",
+    "expected_section": "111",
+    "found": false,
+    "rank": null,
+    "latency_sec": 0.265,
+    "sources_returned": [
+      "RHS ---\n[SEADUS] RHS § 110 lg 1 : Pakkumus on pakkuja tahteavaldus hankelepingu sõlmimiseks, mis on ...",
+      "RHS ---\n[SEADUS] RHS § 110 lg 3 : Pakkumuse esitamisega kinnitab pakkuja kõigi riigihanke alusdokume...",
+      "RHS ---\n[SEADUS] RHS § 143 lg 1 : Pakkumuste ja taotluste esitamise tähtaja määramisel lähtub hankij..."
+    ],
+    "raw_context_preview": "--- ALLIKAS: RHS ---\n[SEADUS] RHS § 110 lg 1 : Pakkumus on pakkuja tahteavaldus hankelepingu sõlmimiseks, mis on pakkujale siduv alates pakkumuste esitamise tähtpäevast vähemalt kuni riigihanke alusdo..."
+  },
+  {
+    "timestamp": "2026-04-17 23:02:51",
+    "question": "kas hankija peab põhjendama pakkumuse tagasilükkamist?",
+    "expected_section": "116",
+    "found": false,
+    "rank": null,
+    "latency_sec": 0.296,
+    "sources_returned": [
+      "RHS ---\n[SEADUS] RHS § 115 lg 8 : Hankija kontrollib selgitust ja hindab esitatud tõendeid, konsulte...",
+      "RHS ---\n[SEADUS] RHS § 115 lg 1 : Kui hankija leiab, et pakkumuse maksumus on hankelepingu eset arve...",
+      "RHS ---\n[SEADUS] RHS § 115 lg 9 : Hankija lükkab pakkumuse tagasi, kui ta tuvastab, et pakkumuse põh..."
+    ],
+    "raw_context_preview": "--- ALLIKAS: RHS ---\n[SEADUS] RHS § 115 lg 8 : Hankija kontrollib selgitust ja hindab esitatud tõendeid, konsulteerides vajaduse korral pakkujaga. Kui hankija leiab endiselt, et pakkumuse maksumus on ..."
+  },
+  {
+    "timestamp": "2026-04-17 23:02:51",
+    "question": "hei, mis on hankemenetluse lõppemise alused?",
+    "expected_section": "73",
+    "found": true,
+    "rank": 1,
+    "latency_sec": 0.289,
+    "sources_returned": [
+      "RHS ---\n[SEADUS] RHS § 73 lg 4 : Kui hankija on jaganud riigihanke ühe hankemenetluse raames osadeks...",
+      "RHS ---\n[SEADUS] RHS § 33 lg 3 : Dünaamiline hankesüsteem lõpeb selle kehtivusaja lõppemisega. Hanki...",
+      "RHS ---\n[SEADUS] RHS § 81 lg 4 : Hankemenetluse peatumisel võib hankija teha üksnes käesoleva paragr..."
+    ],
+    "raw_context_preview": "--- ALLIKAS: RHS ---\n[SEADUS] RHS § 73 lg 4 : Kui hankija on jaganud riigihanke ühe hankemenetluse raames osadeks, lõpeb hankemenetlus iga osa suhtes mõne käesoleva paragrahvi lõikes 3 sätestatud alus..."
+  },
+  {
+    "timestamp": "2026-04-17 23:02:51",
+    "question": "millal loetakse pakkumus siduvaks?",
+    "expected_section": "110",
+    "found": true,
+    "rank": 1,
+    "latency_sec": 0.278,
+    "sources_returned": [
+      "RHS ---\n[SEADUS] RHS § 110 lg 1 : Pakkumus on pakkuja tahteavaldus hankelepingu sõlmimiseks, mis on ...",
+      "RHS ---\n[SEADUS] RHS § 119 lg 1 : Kui edukas pakkuja ei allkirjasta hankija antud tähtaja jooksul ha...",
+      "RHS ---\n[SEADUS] RHS § 143 lg 1 : Pakkumuste ja taotluste esitamise tähtaja määramisel lähtub hankij..."
+    ],
+    "raw_context_preview": "--- ALLIKAS: RHS ---\n[SEADUS] RHS § 110 lg 1 : Pakkumus on pakkuja tahteavaldus hankelepingu sõlmimiseks, mis on pakkujale siduv alates pakkumuste esitamise tähtpäevast vähemalt kuni riigihanke alusdo..."
+  },
+  {
+    "timestamp": "2026-04-17 23:02:52",
+    "question": "millal hankija ei pea tähtaega pikendama seoses alusdokumentide muutmisega",
+    "expected_section": "82",
+    "found": true,
+    "rank": 1,
+    "latency_sec": 0.316,
+    "sources_returned": [
+      "RHS ---\n[SEADUS] RHS § 82 lg 2 : Hankija ei pea käesoleva paragrahvi lõikes 1 nimetatud tähtaega pik...",
+      "RHS ---\n[SEADUS] RHS § 82 lg 1 : Riigihanke alusdokumentide muutmise korral peab hankija pikendama p...",
+      "RHS ---\n[SEADUS] RHS § 129 lg 3 : Riigihanke alusdokumentide muutmise korral peab hankija pikendama ..."
+    ],
+    "raw_context_preview": "--- ALLIKAS: RHS ---\n[SEADUS] RHS § 82 lg 2 : Hankija ei pea käesoleva paragrahvi lõikes 1 nimetatud tähtaega pikendama, kui muudatused puudutavad üksnes kontaktandmeid või kui esialgsetest riigihanke..."
+  },
+  {
+    "timestamp": "2026-04-17 23:02:52",
+    "question": "kellel on lubatud andmete ristkasutus?",
+    "expected_section": "182",
+    "found": true,
+    "rank": 1,
+    "latency_sec": 0.265,
+    "sources_returned": [
+      "RHS ---\n[SEADUS] RHS § 182 lg  : Registrile seadusega antud ülesannete täitmiseks on registri vastut...",
+      "RHS ---\n[SEADUS] RHS § 181 lg 1 : Register on riigihangete ja toetuse saaja ostude andmete töötlemis...",
+      "RHS ---\n[SEADUS] RHS § 184 lg  : Rahandusministeerium edastab Euroopa Komisjonile Euroopa Parlamendi..."
+    ],
+    "raw_context_preview": "--- ALLIKAS: RHS ---\n[SEADUS] RHS § 182 lg  : Registrile seadusega antud ülesannete täitmiseks on registri vastutaval ja volitatud töötlejal lubatud esitada elektroonilisi päringuid teistele riigi või..."
+  },
+  {
+    "timestamp": "2026-04-17 23:02:52",
+    "question": "kes võib vaidlustada hankija tegevuse?",
+    "expected_section": "185",
+    "found": true,
+    "rank": 2,
+    "latency_sec": 0.262,
+    "sources_returned": [
+      "RHS ---\n[SEADUS] RHS § 193 lg 5 : Kui vaidlustatakse riigihanke menetluses hankelepingu sõlmimisele ...",
+      "RHS ---\n[SEADUS] RHS § 185 lg 6 : Pärast hankelepingu sõlmimist võib kahju hüvitamise taotluse esita...",
+      "RHS ---\n[SEADUS] RHS § 115 lg 8 : Hankija kontrollib selgitust ja hindab esitatud tõendeid, konsulte..."
+    ],
+    "raw_context_preview": "--- ALLIKAS: RHS ---\n[SEADUS] RHS § 193 lg 5 : Kui vaidlustatakse riigihanke menetluses hankelepingu sõlmimisele eelnev ajaliselt viimane hankija otsus ja kui oluline avalik huvi, mida võidakse kahjus..."
+  },
+  {
+    "timestamp": "2026-04-17 23:02:52",
+    "question": "millal peab olema laekunud vaidlustuskomisjonile hanke vaidlustus?",
+    "expected_section": "189",
+    "found": true,
+    "rank": 1,
+    "latency_sec": 0.313,
+    "sources_returned": [
+      "RHS ---\n[SEADUS] RHS § 189 lg 5 : Vaidlustus, mis esitatakse raamlepingu alusel hankelepingu sõlmimi...",
+      "RHS ---\n[SEADUS] RHS § 189 lg 1 : Vaidlustus peab olema laekunud vaidlustuskomisjonile kümne päeva j...",
+      "RHS ---\n[SEADUS] RHS § 189 lg 4 : Vaidlustus lihthankemenetluses, välja arvatud käesoleva paragrahvi..."
+    ],
+    "raw_context_preview": "--- ALLIKAS: RHS ---\n[SEADUS] RHS § 189 lg 5 : Vaidlustus, mis esitatakse raamlepingu alusel hankelepingu sõlmimise menetluses, peab olema laekunud vaidlustuskomisjonile seitsme päeva jooksul alates p..."
+  },
+  {
+    "timestamp": "2026-04-17 23:02:53",
+    "question": "kas seadus kehtib sisetehingutele?",
+    "expected_section": "12",
+    "found": true,
+    "rank": 1,
+    "latency_sec": 0.259,
+    "sources_returned": [
+      "RHS ---\n[SEADUS] RHS § 12 lg 1 : Käesolevat seadust ei ole avaliku sektori hankija kohustatud rakend...",
+      "RHS ---\n[SEADUS] RHS § 12 lg 4 : Sisetehing on ka hankeleping, mille kontrollitav juriidiline isik a...",
+      "RHS ---\n[SEADUS] RHS § 12 lg 2 : Sisetehing on hankeleping, mille avaliku sektori hankija (edaspidi ..."
+    ],
+    "raw_context_preview": "--- ALLIKAS: RHS ---\n[SEADUS] RHS § 12 lg 1 : Käesolevat seadust ei ole avaliku sektori hankija kohustatud rakendama sisetehingutele.\n\n--- ALLIKAS: RHS ---\n[SEADUS] RHS § 12 lg 4 : Sisetehing on ka ha..."
+  },
+  {
+    "timestamp": "2026-04-17 23:02:53",
+    "question": "millega algab lihthankemenetlus?",
+    "expected_section": "125",
+    "found": true,
+    "rank": 1,
+    "latency_sec": 0.259,
+    "sources_returned": [
+      "RHS ---\n[SEADUS] RHS § 125 lg 1 : Lihthankemenetlus algab hanketeate avaldamisega registris, välja a...",
+      "RHS ---\n[SEADUS] RHS § 73 lg 1 : Hankemenetlus, välja arvatud väljakuulutamiseta läbirääkimistega ha...",
+      "RHS ---\n[SEADUS] RHS § 125 lg 5 : Lihthankemenetluse läbiviimisel järgib hankija käesoleva seaduse 1..."
+    ],
+    "raw_context_preview": "--- ALLIKAS: RHS ---\n[SEADUS] RHS § 125 lg 1 : Lihthankemenetlus algab hanketeate avaldamisega registris, välja arvatud käesoleva paragrahvi lõikes 3 sätestatud juhul, ning lõpeb käesoleva seaduse § 7..."
+  },
+  {
+    "timestamp": "2026-04-17 23:02:53",
+    "question": "millal on hankeleping tühine",
+    "expected_section": "121",
+    "found": true,
+    "rank": 1,
+    "latency_sec": 0.25,
+    "sources_returned": [
+      "RHS ---\n[SEADUS] RHS § 121 lg 1 : Hankeleping on tühine, kui:...",
+      "RHS ---\n[SEADUS] RHS § 120 lg 4 : Enne ooteaja möödumist sõlmitud hankeleping on tühine....",
+      "RHS ---\n[SEADUS] RHS § 194 lg 4 : Pärast vaidlustuse esitamise kohta käesoleva paragrahvi lõikes 2 v..."
+    ],
+    "raw_context_preview": "--- ALLIKAS: RHS ---\n[SEADUS] RHS § 121 lg 1 : Hankeleping on tühine, kui:\n\n--- ALLIKAS: RHS ---\n[SEADUS] RHS § 120 lg 4 : Enne ooteaja möödumist sõlmitud hankeleping on tühine.\n\n--- ALLIKAS: RHS ---\n..."
+  },
+  {
+    "timestamp": "2026-04-17 23:02:53",
+    "question": "mis on järelvalveteade?",
+    "expected_section": "207",
+    "found": true,
+    "rank": 1,
+    "latency_sec": 0.257,
+    "sources_returned": [
+      "RHS ---\n[SEADUS] RHS § 207 lg 1 : Järelevalveteade on pöördumine, mis osutab käesoleva seaduse rikku...",
+      "RHS ---\n[SEADUS] RHS § 207 lg 2 : Järelevalveteate võib esitada igaüks, sõltumata sellest, kas rikku...",
+      "RHS ---\n[SEADUS] RHS § 203 lg 3 : Järelevalvemenetluses kontrollitakse hankija tegevuse õiguspärasus..."
+    ],
+    "raw_context_preview": "--- ALLIKAS: RHS ---\n[SEADUS] RHS § 207 lg 1 : Järelevalveteade on pöördumine, mis osutab käesoleva seaduse rikkumisele ja millele kohaldatakse märgukirjale ja selgitustaotlusele vastamise ning kollek..."
+  },
+  {
+    "timestamp": "2026-04-17 23:02:54",
+    "question": "kes võib esitada järelvalveteate?",
+    "expected_section": "207",
+    "found": true,
+    "rank": 1,
+    "latency_sec": 0.259,
+    "sources_returned": [
+      "RHS ---\n[SEADUS] RHS § 207 lg 2 : Järelevalveteate võib esitada igaüks, sõltumata sellest, kas rikku...",
+      "RHS ---\n[SEADUS] RHS § 207 lg 1 : Järelevalveteade on pöördumine, mis osutab käesoleva seaduse rikku...",
+      "RHS ---\n[SEADUS] RHS § 205 lg 1 : Järelevalvemenetlus viiakse läbi Rahandusministeeriumi algatusel ü..."
+    ],
+    "raw_context_preview": "--- ALLIKAS: RHS ---\n[SEADUS] RHS § 207 lg 2 : Järelevalveteate võib esitada igaüks, sõltumata sellest, kas rikkumisena kirjeldatud juhtum rikub teate esitaja õigusi.\n\n--- ALLIKAS: RHS ---\n[SEADUS] RH..."
+  },
+  {
+    "timestamp": "2026-04-17 23:02:54",
+    "question": "kuidas menetletakse ideekonkurssi?",
+    "expected_section": "17",
+    "found": true,
+    "rank": 3,
+    "latency_sec": 0.255,
+    "sources_returned": [
+      "RHS ---\n[SEADUS] RHS § 130 lg 6 : Ideekonkursi žürii koostab oma tegevuse kohta protokolli, kuhu kan...",
+      "RHS ---\n[SEADUS] RHS § 129 lg 6 : Ideekavandeid hindab ideekonkursi žürii. Hankija kuulutab ideekonk...",
+      "RHS ---\n[SEADUS] RHS § 17 lg 1 : Avaliku sektori hankija kohaldab ideekonkursi korraldamisel käesole..."
+    ],
+    "raw_context_preview": "--- ALLIKAS: RHS ---\n[SEADUS] RHS § 130 lg 6 : Ideekonkursi žürii koostab oma tegevuse kohta protokolli, kuhu kantakse hinnatud ideekavandite paremusjärjestus, ideekonkursi võitjatele antavad auhinnad..."
+  },
+  {
+    "timestamp": "2026-04-17 23:02:54",
+    "question": "Kas hankija võib piirata riigihanke alusdokumentides riigihankes osalejate ringi",
+    "expected_section": "13",
+    "found": true,
+    "rank": 1,
+    "latency_sec": 0.32,
+    "sources_returned": [
+      "RHS ---\n[SEADUS] RHS § 13 lg 1 : Hankija võib piirata riigihanke alusdokumentides riigihankes osalev...",
+      "RHS ---\n[SEADUS] RHS § 7 lg 3 : Hankija võib piirata pakkujate ja taotlejate ringi, lubades riigihan...",
+      "RHS ---\n[SEADUS] RHS § 141 lg 2 : Hankija võib piirata nende taotlejate arvu, kellele ta teeb pakkum..."
+    ],
+    "raw_context_preview": "--- ALLIKAS: RHS ---\n[SEADUS] RHS § 13 lg 1 : Hankija võib piirata riigihanke alusdokumentides riigihankes osalevate ettevõtjate ringi, lubades osaleda üksnes kaitstud töö keskustel ja ettevõtjatel, k..."
+  },
+  {
+    "timestamp": "2026-04-17 23:02:55",
+    "question": "millised on seadusest lähtuvad erandid",
+    "expected_section": "11",
+    "found": false,
+    "rank": null,
+    "latency_sec": 0.261,
+    "sources_returned": [
+      "RHS ---\n[SEADUS] RHS § 133 lg 3 : Käesoleva paragrahvi lõike 1 punktis 3 ja lõike 2 punktis 2 nimeta...",
+      "RHS ---\n[SEADUS] RHS § 153 lg 3 : Käesoleva paragrahvi lõike 1 punktis 3 ja lõike 2 punktis 2 nimeta...",
+      "RHS ---\n[SEADUS] RHS § 153 lg 5 : Käesoleva paragrahvi lõike 1 punktis 1 nimetatud erandi rakendamis..."
+    ],
+    "raw_context_preview": "--- ALLIKAS: RHS ---\n[SEADUS] RHS § 133 lg 3 : Käesoleva paragrahvi lõike 1 punktis 3 ja lõike 2 punktis 2 nimetatud erandit võib kohaldada tingimusel, et vähemalt 80 protsenti seotud ettevõtja eelnev..."
+  }
+]
