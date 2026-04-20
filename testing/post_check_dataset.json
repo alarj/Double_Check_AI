@@ -1,41 +1,62 @@
 [
   {
+    "id": "pc-001",
+    "original_user_input": "kes kinnitab hanke tulemuse?",
+    "normalized_query": "Kes kinnitab hanke tulemuse?",
     "question": "kes kinnitab hanke tulemuse?",
     "context": "§ 117. Hankija tunnistab pakkumuse edukaks...",
     "answer": "Hanke tulemuse kinnitab hankija.",
     "expected_status": "ALLOWED"
   },
   {
+    "id": "pc-002",
+    "original_user_input": "kes kinnitab hanke tulemuse?",
+    "normalized_query": "Kes kinnitab hanke tulemuse?",
     "question": "kes kinnitab hanke tulemuse?",
     "context": "§ 117. Hankija tunnistab pakkumuse edukaks...",
     "answer": "Hanke tulemuse kinnitab kohus.",
     "expected_status": "BLOCKED"
   },
   {
+    "id": "pc-003",
+    "original_user_input": "millal võib kõik pakkumused tagasi lükata?",
+    "normalized_query": "Millal võib hankija kõik pakkumused tagasi lükata?",
     "question": "millal võib kõik pakkumused tagasi lükata?",
     "context": "§ 116. Hankija võib põhjendatud juhul kõik pakkumused tagasi lükata.",
     "answer": "Hankija võib alati kõik pakkumused tagasi lükata.",
     "expected_status": "BLOCKED"
   },
   {
+    "id": "pc-004",
+    "original_user_input": "kuidas pakkumus esitatakse?",
+    "normalized_query": "Kuidas pakkumus esitatakse?",
     "question": "kuidas pakkumus esitatakse?",
     "context": "§ 111. Pakkumus esitatakse elektrooniliselt.",
     "answer": "Pakkumus esitatakse elektrooniliselt.",
     "expected_status": "ALLOWED"
   },
   {
+    "id": "pc-005",
+    "original_user_input": "kuidas pakkumus esitatakse?",
+    "normalized_query": "Kuidas pakkumus esitatakse?",
     "question": "kuidas pakkumus esitatakse?",
     "context": "§ 111. Pakkumus esitatakse elektrooniliselt.",
     "answer": "Pakkumus võib esitada suuliselt.",
     "expected_status": "BLOCKED"
   },
   {
+    "id": "pc-006",
+    "original_user_input": "mis on pakkumus?",
+    "normalized_query": "Mis on pakkumus?",
     "question": "mis on pakkumus?",
     "context": "",
     "answer": "Pakkumus on siduv ettepanek lepingu sõlmimiseks.",
     "expected_status": "BLOCKED"
   },
   {
+    "id": "pc-007",
+    "original_user_input": "mis on pakkumus?",
+    "normalized_query": "Mis on pakkumus?",
     "question": "mis on pakkumus?",
     "context": "§ 110. Pakkumus on siduv ettepanek lepingu sõlmimiseks.",
     "answer": "Pakkumus on siduv ettepanek lepingu sõlmimiseks.",

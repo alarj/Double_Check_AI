@@ -47,7 +47,14 @@ class MainQueryRequest(BaseModel):
 
 class PostCheckRequest(BaseModel):
     ai_response: str
-    original_query: str
+    # Pre-check "user_input" (algne, töötlemata küsimus)
+    original_user_input: Optional[str] = Field(None, min_length=1)
+    # Pre-check väljund (normaliseeritud küsimus), mille alusel tehti põhiküsimus/RAG
+    normalized_query: Optional[str] = ""
+    # Kontekst, mille alusel põhipäring LLM-s tehti (RAG kontekst)
+    context: Optional[str] = ""
+    # Backward compatibility varasema kliendi jaoks
+    original_query: Optional[str] = None
     model: str = "gemma2:2b"
     timeout: Optional[int] = 90
     threads: Optional[int] = 4
@@ -161,10 +168,23 @@ async def post_check(req: PostCheckRequest, user: str = Depends(authenticate)):
     start_time = time.time()
     start_time_str = time.strftime("%H:%M:%S")
     try:
+        # Toetame vanemat kliendilepingut (original_query) ilma 422 errorita.
+        if (not req.original_user_input) and req.original_query:
+            req.original_user_input = req.original_query
+        if not req.original_user_input:
+            raise HTTPException(status_code=422, detail="Missing required field: original_user_input (or legacy original_query)")
+
         # Võtame õige võtmega prompti failist
         sys_prompt = logic_core.PROMPTS.get("POST_CHECK_PROMPT", "{u_input}\n{main_res}")
         # Asendame kohamärgised vastavalt failile prompts.json
-        full_prompt = sys_prompt.replace("{u_input}", req.original_query).replace("{context}", "Puudub").replace("{main_res}", req.ai_response)
+        full_prompt = (
+            sys_prompt
+            .replace("{u_input}", req.original_user_input)
+            .replace("{context}", (req.context or "").strip() or "Puudub")
+            .replace("{main_res}", req.ai_response)
+        )
+        # Kui prompt kasutab lisa-kohamärke, täidame ka need (kui olemas)
+        full_prompt = full_prompt.replace("{normalized_query}", (req.normalized_query or "").strip() or req.original_user_input)
         
         result = logic_core.ask_ollama(
             req.model,
@@ -183,8 +203,13 @@ async def post_check(req: PostCheckRequest, user: str = Depends(authenticate)):
             "start_time": start_time_str,
             "status": parsed_result.get("status", "BLOCKED"),
             "reason": parsed_result.get("reason", ""),
+            "analysis": parsed_result.get("analysis", parsed_result.get("reason", "")),
             "duration": round(duration * 1000, 2),
-            "raw_response": result
+            "raw_response": result,
+            "ai_response": req.ai_response,
+            "original_user_input": req.original_user_input,
+            "normalized_query": req.normalized_query or "",
+            "context": req.context or "",
         }
         
         log_api_call("/post-check", 200, duration, user, response_data)
