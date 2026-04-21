@@ -55,7 +55,7 @@ class PreCheckRequest(BaseModel):
 class MainQueryRequest(BaseModel):
     user_input: str
     context: str
-    model: str = "deepseek-r1:8b"
+    model: str = "llama3:8b"
     timeout: Optional[int] = 120
     threads: Optional[int] = 8
 
