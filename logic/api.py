@@ -27,6 +27,7 @@ TEST_LOG_FILES = {
     "test-llm": "/testing/llm-test-log.json",
     "test-retrieval": "/testing/retr-test-log.json",
     "test-benchmark-embeddings": "/testing/benchmark_embeddings-log.jsonl",
+    "prompts-change": "/logic/prompts_change_log.json",
 }
 
 
@@ -250,6 +251,7 @@ def get_logs(
             "test-llm",
             "test-retrieval",
             "test-benchmark-embeddings",
+            "prompts-change",
         ],
     ),
     limit: int = Query(50, description="Mitut viimast rida kuvada"),

@@ -18,6 +18,8 @@ services:
     working_dir: /app
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
+      - BUILD_TIME=${BUILD_TIME:-teadmata}
+      - BUILD_BRANCH=${BUILD_BRANCH:-teadmata}
     # Käivitame Streamlit rakenduse
     command: >
       streamlit run main.py 
@@ -43,6 +45,8 @@ services:
     working_dir: /app
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
+      - BUILD_TIME=${BUILD_TIME:-teadmata}
+      - BUILD_BRANCH=${BUILD_BRANCH:-teadmata}
     command: uvicorn api:app --host 0.0.0.0 --port 8000
     volumes:
       - ./logic:/app
@@ -61,6 +65,8 @@ services:
     working_dir: /app
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
+      - BUILD_TIME=${BUILD_TIME:-teadmata}
+      - BUILD_BRANCH=${BUILD_BRANCH:-teadmata}
     # See konteiner ootab käsku (manual trigger) või käivitab konkreetse testi
     command: tail -f /dev/null
     depends_on:
