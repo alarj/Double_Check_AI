@@ -2,6 +2,8 @@ import time
 import json
 import os
 import requests
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from requests.auth import HTTPBasicAuth
 from typing import Any, Dict, List, Optional
 
@@ -14,6 +16,10 @@ MODELS_TO_TEST = ["gemma2:2b", "mistral", "llama3:8b", "phi3"]
 
 DATASET_FILE = "/testing/post_check_dataset.json"
 LOG_FILE = "/testing/bench-post-check-log.json"
+
+
+def ee_now_str() -> str:
+    return datetime.now(ZoneInfo("Europe/Tallinn")).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def load_dataset() -> List[Dict[str, Any]]:
@@ -47,7 +53,7 @@ def run_benchmark() -> None:
         print("⚠️ Testandmed puuduvad. Lõpetan.")
         return
 
-    run_timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+    run_timestamp = ee_now_str()
     print(f"🚀 ALUSTAN POST-CHECK BENCHMARKINGUT ({len(dataset)} juhtumit, {len(MODELS_TO_TEST)} mudelit)")
 
     summary_results: List[Dict[str, Any]] = []
@@ -123,7 +129,7 @@ def run_benchmark() -> None:
 
             log_entry = {
                 "run_timestamp": run_timestamp,
-                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "timestamp": ee_now_str(),
                 "model": model,
                 "case_id": case_id,
                 "expected_status": expected_status,

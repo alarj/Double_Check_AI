@@ -3,6 +3,8 @@ import json
 import os
 import sys
 import re
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 # --- KESKKONNA SEADISTAMINE ---
 # Kuna skript jookseb test-app konteineris, lisame /app kausta otsinguteele,
@@ -19,6 +21,21 @@ except ImportError as e:
 # --- KONFIGURATSIOON ---
 DATASET_FILE = "/testing/retrieval_dataset.json"
 LOG_FILE = "/testing/retr-test-log.json"
+
+
+def ee_now_str() -> str:
+    return datetime.now(ZoneInfo("Europe/Tallinn")).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def load_existing_log():
+    if not os.path.exists(LOG_FILE):
+        return []
+    try:
+        with open(LOG_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            return data if isinstance(data, list) else []
+    except Exception:
+        return []
 
 def load_dataset():
     """Laeb testandmed JSON failist."""
@@ -94,7 +111,7 @@ def run_retrieval_benchmark():
             
             # Lisame andmed logisse
             full_log.append({
-                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "timestamp": ee_now_str(),
                 "question": query,
                 "expected_section": expected_sec,
                 "found": is_topK,
@@ -107,7 +124,7 @@ def run_retrieval_benchmark():
         except Exception as e:
             print(f"  🔥 VIGA päringul '{query[:30]}': {e}")
             full_log.append({
-                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "timestamp": ee_now_str(),
                 "question": query,
                 "expected_section": expected_sec,
                 "error": str(e)
@@ -115,9 +132,14 @@ def run_retrieval_benchmark():
 
     # Salvestame koondlogi faili
     try:
+        existing_log = load_existing_log()
+        combined_log = existing_log + full_log
         with open(LOG_FILE, "w", encoding="utf-8") as f:
-            json.dump(full_log, f, ensure_ascii=False, indent=2)
-        print(f"\n💾 Detailne logi salvestatud: {LOG_FILE}")
+            json.dump(combined_log, f, ensure_ascii=False, indent=2)
+        print(
+            f"\n💾 Detailne logi salvestatud: {LOG_FILE} "
+            f"(lisati {len(full_log)} uut kirjet, kokku {len(combined_log)})"
+        )
     except Exception as e:
         print(f"❌ VIGA logi salvestamisel: {e}")
 

@@ -1,0 +1,27 @@
+[
+  {
+    "question": "kes kinnitab hanke tulemuse",
+    "expected_section": "14",
+    "expected_keywords": ["kinnitab", "hankija", "otsus"]
+  },
+  {
+    "question": "millised on riigihanke piirmäärad",
+    "expected_section": "14",
+    "expected_keywords": ["piirmäär", "rahvusvaheline"]
+  },
+  {
+    "question": "pakkumuse edukaks tunnistamine",
+    "expected_section": "117",
+    "expected_keywords": ["edukaks", "tunnistamine", "hindamiskriteeriumid"]
+  },
+  {
+    "question": "hankelepingu muutmise tingimused",
+    "expected_section": "123",
+    "expected_keywords": ["muutmine", "vääramatu jõud"]
+  },
+  {
+    "question": "millal võib kasutada väljakuulutamiseta läbirääkimistega hankemenetlust",
+    "expected_section": "49",
+    "expected_keywords": ["läbirääkimistega", "erakorraline"]
+  }
+]

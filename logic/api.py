@@ -4,6 +4,8 @@ import logic_core
 import json
 import os
 import time
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from pydantic import BaseModel, Field
 from typing import Optional, List
 
@@ -19,6 +21,18 @@ security = HTTPBasic()
 # Failide asukohad Dockeris
 API_LOG_FILE = "/app/api_access.log"
 UI_LOG_FILE = "/app/ai_turvakiht.log"
+TEST_LOG_FILES = {
+    "test-pre-check": "/testing/bench-pre-check-log.json",
+    "test-post-check": "/testing/bench-post-check-log.json",
+    "test-llm": "/testing/llm-test-log.json",
+    "test-retrieval": "/testing/retr-test-log.json",
+    "test-benchmark-embeddings": "/testing/benchmark_embeddings-log.jsonl",
+}
+
+
+def ee_now_str(fmt: str = "%Y-%m-%d %H:%M:%S") -> str:
+    """Tagastab kellaaja Eesti ajavööndis."""
+    return datetime.now(ZoneInfo("Europe/Tallinn")).strftime(fmt)
 
 # --- AUTENTIMINE ---
 def authenticate(credentials: HTTPBasicCredentials = Depends(security)):
@@ -40,7 +54,7 @@ class PreCheckRequest(BaseModel):
 
 class MainQueryRequest(BaseModel):
     user_input: str
-    context: Optional[str] = ""
+    context: str
     model: str = "deepseek-r1:8b"
     timeout: Optional[int] = 120
     threads: Optional[int] = 8
@@ -63,7 +77,7 @@ class PostCheckRequest(BaseModel):
 def log_api_call(endpoint: str, status_code: int, duration: float, user: str, extra_data: dict = None):
     """Logib API päringu info faili."""
     log_entry = {
-        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "timestamp": ee_now_str(),
         "endpoint": endpoint,
         "user": user,
         "status": status_code,
@@ -132,10 +146,13 @@ async def run_query(req: MainQueryRequest, user: str = Depends(authenticate)):
     start_time = time.time()
     start_time_str = time.strftime("%H:%M:%S")
     try:
-        # Võtame õige võtmega prompti failist
-        sys_prompt = logic_core.PROMPTS.get("RAG_PROMPT", "{context}\n{query}")
-        # Asendame konteksti ja küsimuse kohamärgised
-        full_prompt = sys_prompt.replace("{context}", req.context or "Puudub").replace("{query}", req.user_input)
+        # Võtame prompti prompts.json failist ning täidame sisendparameetritega
+        rag_prompt_template = logic_core.PROMPTS.get("RAG_PROMPT", "{context}\n{query}")
+        full_prompt = (
+            rag_prompt_template
+            .replace("{context}", req.context)
+            .replace("{query}", req.user_input)
+        )
         
         result = logic_core.ask_ollama(
             req.model,
@@ -149,7 +166,9 @@ async def run_query(req: MainQueryRequest, user: str = Depends(authenticate)):
             "model": req.model,
             "prompt": full_prompt,
             "start_time": start_time_str,
-            "response": result,
+            "context_used": req.context,
+            "user_input": req.user_input,
+            "result": result,
             "duration": round(duration * 1000, 2),
             "raw_response": result
         }
@@ -221,31 +240,61 @@ async def post_check(req: PostCheckRequest, user: str = Depends(authenticate)):
 @app.get("/logs", tags=["Süsteem"])
 def get_logs(
     user: str = Depends(authenticate), 
-    source: str = Query("api", enum=["api", "ui"]), 
+    source: str = Query(
+        "api",
+        enum=[
+            "api",
+            "ui",
+            "test-pre-check",
+            "test-post-check",
+            "test-llm",
+            "test-retrieval",
+            "test-benchmark-embeddings",
+        ],
+    ),
     limit: int = Query(50, description="Mitut viimast rida kuvada"),
     start: Optional[str] = Query(None, description="Algusaeg (YYYY-MM-DD HH:MM:SS)"),
     end: Optional[str] = Query(None, description="Lõpuaeg (YYYY-MM-DD HH:MM:SS)")
 ):
     """Tagastab süsteemi logid filtreeritult."""
-    path = API_LOG_FILE if source == "api" else UI_LOG_FILE
+    if source == "api":
+        path = API_LOG_FILE
+    elif source == "ui":
+        path = UI_LOG_FILE
+    else:
+        path = TEST_LOG_FILES.get(source, "")
+
     if not os.path.exists(path):
         return {"error": f"Logifail asukohas {path} puudub", "data": []}
     
     results = []
     try:
         with open(path, "r", encoding="utf-8") as f:
-            lines = f.readlines()
-            for line in lines[-500:]:
-                try:
-                    entry = json.loads(line)
-                    ts = entry.get("timestamp", "")
-                    
-                    if start and ts < start: continue
-                    if end and ts > end: continue
-                    
-                    results.append(entry)
-                except:
-                    continue
+            raw_content = f.read().strip()
+
+        # Toetame nii JSONL (1 kirje rea kohta) kui ka JSON list formaati.
+        entries = []
+        if raw_content:
+            if raw_content.startswith("["):
+                parsed = json.loads(raw_content)
+                if isinstance(parsed, list):
+                    entries = parsed
+            else:
+                for line in raw_content.splitlines():
+                    line = line.strip()
+                    if not line:
+                        continue
+                    entries.append(json.loads(line))
+
+        for entry in entries[-500:]:
+            if not isinstance(entry, dict):
+                continue
+            ts = entry.get("timestamp", "")
+            if start and ts < start:
+                continue
+            if end and ts > end:
+                continue
+            results.append(entry)
         
         return {
             "source": source, 
@@ -273,7 +322,7 @@ def health_check():
         "status": "online",
         "api_version": "1.9",
         "ollama_connection": ollama_status,
-        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
+        "timestamp": ee_now_str()
     }
 
 if __name__ == "__main__":

@@ -3,6 +3,8 @@ import os
 import re
 import sys
 import time
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from typing import Any, Dict, List
 
 
@@ -34,7 +36,15 @@ NO_CONTEXT_RESPONSE = "Esitatud kontekstis info puudub."
 
 
 def print_step(message: str) -> None:
-    print(f"[{time.strftime('%H:%M:%S')}] {message}", flush=True)
+    print(f"[{ee_now_datetime().strftime('%H:%M:%S')}] {message}", flush=True)
+
+
+def ee_now_datetime() -> datetime:
+    return datetime.now(ZoneInfo("Europe/Tallinn"))
+
+
+def ee_now_str() -> str:
+    return ee_now_datetime().strftime("%Y-%m-%d %H:%M:%S")
 
 
 def load_dataset() -> List[Dict[str, Any]]:
@@ -55,6 +65,21 @@ def save_log(log_data: Dict[str, Any]) -> None:
             json.dump(log_data, handle, ensure_ascii=False, indent=2)
     except Exception as exc:
         print_step(f"VIGA logi salvestamisel: {exc}")
+
+
+def load_existing_log_history() -> List[Dict[str, Any]]:
+    if not os.path.exists(LOG_FILE):
+        return []
+    try:
+        with open(LOG_FILE, "r", encoding="utf-8") as handle:
+            existing = json.load(handle)
+            if isinstance(existing, list):
+                return existing
+            if isinstance(existing, dict):
+                return [existing]
+    except Exception:
+        return []
+    return []
 
 
 def normalize_text(value: str) -> str:
@@ -410,8 +435,9 @@ def run_llm_test() -> int:
         return 1
 
     run_started = time.time()
+    existing_history = load_existing_log_history()
     log_data: Dict[str, Any] = {
-        "run_started_at": logic_core.get_ee_time().strftime("%Y-%m-%d %H:%M:%S"),
+        "run_started_at": ee_now_str(),
         "config": {
             "dataset_file": DATASET_FILE,
             "main_model": DEFAULT_MAIN_MODEL,
@@ -425,8 +451,6 @@ def run_llm_test() -> int:
         "results": [],
         "summary": {},
     }
-    save_log(log_data)
-
     print_step(f"ALUSTAN LLM TESTI ({len(dataset)} testilugu)")
     print_step(f"Põhimudel: {DEFAULT_MAIN_MODEL} | Hindajamudel: {DEFAULT_JUDGE_MODEL}")
     print_step(f"Märksõna lävend: {KEYWORD_PASS_THRESHOLD:.2f}")
@@ -478,7 +502,7 @@ def run_llm_test() -> int:
 
         case_result = {
             "index": index,
-            "timestamp": logic_core.get_ee_time().strftime("%Y-%m-%d %H:%M:%S"),
+            "timestamp": ee_now_str(),
             "type": case_type,
             "question": question,
             "context": context,
@@ -491,12 +515,11 @@ def run_llm_test() -> int:
         }
         log_data["results"].append(case_result)
         log_data["summary"] = build_summary(log_data["results"], run_started)
-        save_log(log_data)
 
     summary = build_summary(log_data["results"], run_started)
     log_data["summary"] = summary
-    log_data["run_finished_at"] = logic_core.get_ee_time().strftime("%Y-%m-%d %H:%M:%S")
-    save_log(log_data)
+    log_data["run_finished_at"] = ee_now_str()
+    save_log(existing_history + [log_data])
 
     print("\n" + "=" * 72)
     print("LLM TESTI KOKKUVÕTE")

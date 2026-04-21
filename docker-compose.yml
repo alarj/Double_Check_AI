@@ -47,6 +47,7 @@ services:
     volumes:
       - ./logic:/app
       - ./storage/vector_db:/app/chroma_db
+      - ./testing:/testing
     ports:
       - "8000:8000"
     depends_on:
@@ -66,7 +67,6 @@ services:
       - ollama
     volumes:
       - ./logic:/app
-      - ./data_pipeline:/app/data_pipeline
       - ./testing:/testing  # <--- SEE RIDA ÜHENDAB TESTID
       - ./storage:/app/storage
     restart: always  

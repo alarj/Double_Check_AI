@@ -2,6 +2,8 @@ import time
 import json
 import os
 import requests
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from requests.auth import HTTPBasicAuth
 
 # --- KONFIGURATSIOON ---
@@ -16,6 +18,10 @@ MODELS_TO_TEST = ["gemma2:2b", "mistral", "llama3:8b", "phi3"]
 # Failide asukohad
 DATASET_FILE = "/testing/pre_check_dataset.json"
 LOG_FILE = "/testing/bench-pre-check-log.json"
+
+
+def ee_now_str() -> str:
+    return datetime.now(ZoneInfo("Europe/Tallinn")).strftime("%Y-%m-%d %H:%M:%S")
 
 def load_existing_log():
     """Laeb olemasoleva logi; tagastab tühja listi vigade korral."""
@@ -72,7 +78,7 @@ def run_benchmark():
 
     print(f"🚀 ALUSTAN BENCHMARKINGUT ({len(dataset)} küsimust, {len(MODELS_TO_TEST)} mudelit)")
     
-    run_timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+    run_timestamp = ee_now_str()
     full_log = []
     summary_results = []
 
@@ -158,7 +164,7 @@ def run_benchmark():
                     # Lisame detailsesse logisse
                     full_log.append({
                         "run_timestamp": run_timestamp,
-                        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                        "timestamp": ee_now_str(),
                         "model": model,
                         "case_id": case_id,
                         "desc": desc,
@@ -181,7 +187,7 @@ def run_benchmark():
                     print(f"  ⚠️ API VIGA ({model}): {response.status_code}")
                     full_log.append({
                         "run_timestamp": run_timestamp,
-                        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                        "timestamp": ee_now_str(),
                         "model": model,
                         "input": user_input,
                         "error": f"HTTP {response.status_code}",
@@ -193,7 +199,7 @@ def run_benchmark():
                 print(f"  🔥 SIDEVIGA ({model}): {e}")
                 full_log.append({
                     "run_timestamp": run_timestamp,
-                    "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                    "timestamp": ee_now_str(),
                     "model": model,
                     "case_id": case_id,
                     "desc": desc,
