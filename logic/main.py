@@ -354,8 +354,9 @@ with st.sidebar:
 
     st.divider()
     st.subheader("Mudelid")
-    guard_model_input = st.text_input("Turva/Normaliseerija:", DEFAULT_GUARD, disabled=is_disabled)
+    pre_check_model_input = st.text_input("Pre-check mudel:", DEFAULT_GUARD, disabled=is_disabled)
     main_model_input = st.text_input("Põhimudel (RAG):", DEFAULT_MAIN, disabled=is_disabled)
+    post_check_model_input = st.text_input("Post-check mudel:", DEFAULT_GUARD, disabled=is_disabled)
 
     security_option = st.selectbox(
         "Turvalisuse tase:",
@@ -445,13 +446,13 @@ if st.session_state.processing and st.session_state.current_query:
             update_ui("🔨 Samm 1/4: Päringu valideerimine...")
             pre_p_template = logic_core.PROMPTS.get("PRE_CHECK_PROMPT", "")
             pre_p = pre_p_template.replace("{u_input}", u_input)
-            pre_res = logic_core.ask_ollama(guard_model_input, pre_p, selected_threads, selected_timeout)
+            pre_res = logic_core.ask_ollama(pre_check_model_input, pre_p, selected_threads, selected_timeout)
             status, normalized = logic_core.parse_pre_check(pre_res)
             pre_duration = round(time.time() - step_start, 2)
             update_ui(f"✅ Samm 1/4 valmis ({pre_duration} sek)")
 
             log_data["steps"]["pre_check"] = {
-                "model": guard_model_input,
+                "model": pre_check_model_input,
                 "prompt": pre_p,
                 "start_time": logic_core.get_ee_time().strftime("%H:%M:%S"),
                 "status": status,
@@ -517,7 +518,7 @@ if st.session_state.processing and st.session_state.current_query:
                     )
 
                     step_start_post = time.time()
-                    post_res = logic_core.ask_ollama(guard_model_input, post_p, selected_threads, selected_timeout)
+                    post_res = logic_core.ask_ollama(post_check_model_input, post_p, selected_threads, selected_timeout)
                     post_data = logic_core.parse_json_res(post_res)
                     p_status = post_data.get("status", "ALLOWED")
                     post_analysis = post_data.get("analysis", post_res)
@@ -525,7 +526,7 @@ if st.session_state.processing and st.session_state.current_query:
                     update_ui(f"✅ Samm 4/4 valmis ({post_duration} sek)")
 
                     log_data["steps"]["post_check"] = {
-                        "model": guard_model_input,
+                        "model": post_check_model_input,
                         "prompt": post_p,
                         "start_time": logic_core.get_ee_time().strftime("%H:%M:%S"),
                         "status": p_status,
