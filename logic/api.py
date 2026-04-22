@@ -26,8 +26,8 @@ TEST_LOG_FILES = {
     "test-post-check": "/testing/bench-post-check-log.json",
     "test-llm": "/testing/llm-test-log.json",
     "test-retrieval": "/testing/retr-test-log.json",
-    "test-benchmark-embeddings": "/testing/benchmark_embeddings-log.jsonl",
-    "prompts-change": "/logic/prompts_change_log.json",
+    "test-benchmark-embeddings": "/testing/benchmark_embeddings-log.json",
+    "prompts-change": "/app/prompts_change_log.json",
 }
 
 
@@ -59,6 +59,10 @@ class MainQueryRequest(BaseModel):
     model: str = "llama3:8b"
     timeout: Optional[int] = 120
     threads: Optional[int] = 8
+
+class RetrievalRequest(BaseModel):
+    query: str = Field(..., min_length=1)
+    n_results: Optional[int] = Field(5, ge=1, le=25)
 
 class PostCheckRequest(BaseModel):
     ai_response: str
@@ -178,6 +182,36 @@ async def run_query(req: MainQueryRequest, user: str = Depends(authenticate)):
         return response_data
     except Exception as e:
         log_api_call("/query", 500, 0, user, {"error": str(e)})
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/retrieval", tags=["Retrieval"])
+async def run_retrieval(req: RetrievalRequest, user: str = Depends(authenticate)):
+    """
+    Toob vektorbaasist RAG konteksti antud päringu jaoks.
+    """
+    start_time = time.time()
+    start_time_str = time.strftime("%H:%M:%S")
+    try:
+        n_results = req.n_results or 5
+        context = logic_core.get_context(req.query, n_results=n_results)
+        duration = time.time() - start_time
+        blocks = [f"--- ALLIKAS:{block}" for block in context.split("--- ALLIKAS:") if block.strip()]
+
+        response_data = {
+            "query": req.query,
+            "n_results": n_results,
+            "start_time": start_time_str,
+            "found": bool(context.strip()),
+            "context": context,
+            "sources_returned": [block[:100] + "..." for block in blocks],
+            "raw_context_preview": (context[:200] + "...") if context else "PUUDUB",
+            "duration": round(duration * 1000, 2),
+        }
+
+        log_api_call("/retrieval", 200, duration, user, response_data)
+        return response_data
+    except Exception as e:
+        log_api_call("/retrieval", 500, 0, user, {"query": req.query, "error": str(e)})
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/post-check", tags=["Valideerimine"])

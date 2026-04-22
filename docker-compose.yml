@@ -34,6 +34,7 @@ services:
       - "8501:8501"
     volumes:
       - ./logic:/app
+      - ./:/workspace:ro
       - ./storage/vector_db:/app/chroma_db
       - ./data_pipeline:/app/data_pipeline
       - ./storage:/app/storage
@@ -51,6 +52,7 @@ services:
     volumes:
       - ./logic:/app
       - ./storage/vector_db:/app/chroma_db
+      - ./storage:/app/storage
       - ./testing:/testing
     ports:
       - "8000:8000"

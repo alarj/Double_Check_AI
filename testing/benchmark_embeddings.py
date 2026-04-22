@@ -17,7 +17,7 @@ LAWS_DIR = "/app/storage/raw/laws/"
 DB_BASE_PATH = "/app/storage/vector_db_bench"
 DATASET_PATH = "/testing/eval_dataset.json"
 LEGACY_DATASET_PATH = "/app/data_pipeline/eval_dataset.json"
-LOG_FILE = "/testing/benchmark_embeddings-log.jsonl"
+LOG_FILE = "/testing/benchmark_embeddings-log.json"
 OLLAMA_URL = "http://ollama:11434"
 TOP_K = 5
 MAX_CHUNK_SIZE = 450
@@ -27,10 +27,23 @@ def ee_now_str() -> str:
     return datetime.now(ZoneInfo("Europe/Tallinn")).strftime("%Y-%m-%d %H:%M:%S")
 
 
-def append_jsonl(path, entry):
+def append_json_log(path, entry):
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "a", encoding="utf-8") as f:
-        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    existing = []
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                raw = f.read().strip()
+                if raw:
+                    parsed = json.loads(raw)
+                    if isinstance(parsed, list):
+                        existing = parsed
+        except Exception:
+            existing = []
+
+    existing.append(entry)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(existing, f, ensure_ascii=False, indent=2)
 
 
 def strip_ns(tag):
@@ -230,7 +243,7 @@ if __name__ == "__main__":
             print(f"{r['model']:<22} | {r['acc_top1']:>8.1f}% | {r['acc_top5']:>8.1f}% | {r['avg_rank']:>11.2f} | {r['avg_lat']:>7.3f}s")
         print("=" * 85 + "\n")
 
-    append_jsonl(
+    append_json_log(
         LOG_FILE,
         {
             "timestamp": ee_now_str(),

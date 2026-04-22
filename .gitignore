@@ -1,6 +1,8 @@
 __pycache__/
 *.pyc
 *.log
+*log.json
+prompts_change_log.json
 .env
 # Ignoreeri storage sisu, aga hoia struktuur alles
 storage/**
