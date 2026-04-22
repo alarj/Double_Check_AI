@@ -15,6 +15,8 @@ API_PASS = "parool"
 DATASET_FILE = "/testing/retrieval_dataset.json"
 LOG_FILE = "/testing/retr-test-log.json"
 SECTION_MARKER = "\u00a7"
+DEFAULT_N_RESULTS = 5
+DEFAULT_MAX_CONTEXT_BLOCKS = 5
 
 
 def ee_now_str() -> str:
@@ -45,10 +47,11 @@ def load_dataset():
         return []
 
 
-def fetch_context_via_api(query, n_results=5):
+def fetch_context_via_api(query, n_results=DEFAULT_N_RESULTS, max_context_blocks=DEFAULT_MAX_CONTEXT_BLOCKS):
     payload = {
         "query": query,
         "n_results": n_results,
+        "max_context_blocks": max_context_blocks,
     }
     response = requests.post(
         API_URL,
@@ -82,10 +85,16 @@ def run_retrieval_benchmark():
     for case in test_cases:
         query = case.get("question")
         expected_sec = str(case.get("expected_section"))
+        n_results = int(case.get("n_results", DEFAULT_N_RESULTS))
+        max_context_blocks = int(case.get("max_context_blocks", DEFAULT_MAX_CONTEXT_BLOCKS))
 
         start_time = time.time()
         try:
-            api_data = fetch_context_via_api(query, n_results=5)
+            api_data = fetch_context_via_api(
+                query,
+                n_results=n_results,
+                max_context_blocks=max_context_blocks,
+            )
             context_str = api_data.get("context", "")
 
             latency = time.time() - start_time
@@ -120,6 +129,8 @@ def run_retrieval_benchmark():
                 "timestamp": ee_now_str(),
                 "question": query,
                 "expected_section": expected_sec,
+                "n_results": n_results,
+                "max_context_blocks": max_context_blocks,
                 "found": is_topK,
                 "rank": rank if is_topK else None,
                 "latency_sec": round(latency, 3),
@@ -134,6 +145,8 @@ def run_retrieval_benchmark():
                 "timestamp": ee_now_str(),
                 "question": query,
                 "expected_section": expected_sec,
+                "n_results": n_results,
+                "max_context_blocks": max_context_blocks,
                 "error": str(e),
             })
 

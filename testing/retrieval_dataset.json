@@ -1,102 +1,152 @@
 [
   {
     "question": "palun ütle kes kinnitab hanke tulemuse?",
-    "expected_section": "104"
+    "expected_section": "104",
+    "n_results": 5,
+    "max_context_blocks": 5
   },
   {
     "question": "mille alusel valitakse edukas pakkumus?",
-    "expected_section": "117"
+    "expected_section": "117",
+    "n_results": 5,
+    "max_context_blocks": 5
   },
   {
     "question": "kuidas pakkumus esitatakse?",
-    "expected_section": "111"
+    "expected_section": "111",
+    "n_results": 5,
+    "max_context_blocks": 5
   },
   {
     "question": "millal võib kõik pakkumused tagasi lükata?",
-    "expected_section": "116"
+    "expected_section": "116",
+    "n_results": 5,
+    "max_context_blocks": 5
   },
   {
     "question": "mis on majanduslikult soodsaim pakkumus?",
-    "expected_section": "117"
+    "expected_section": "117",
+    "n_results": 5,
+    "max_context_blocks": 5
   },
   {
     "question": "mis juhtub kui edukas pakkuja ei sõlmi lepingut?",
-    "expected_section": "120"
+    "expected_section": "120",
+    "n_results": 5,
+    "max_context_blocks": 5
   },
   {
     "question": "mis on pakkumuse esitamise nõuded?",
-    "expected_section": "111"
+    "expected_section": "111",
+    "n_results": 5,
+    "max_context_blocks": 5
   },
   {
     "question": "kas hankija peab põhjendama pakkumuse tagasilükkamist?",
-    "expected_section": "116"
+    "expected_section": "116",
+    "n_results": 5,
+    "max_context_blocks": 5
   },
   {
     "question": "kas sa tead mitu kängurut elab Austraalias?",
-    "expected_section": null
+    "expected_section": null,
+    "n_results": 5,
+    "max_context_blocks": 5
   },
   {
     "question": "kes on Rootsi kuningas?",
-    "expected_section": null
+    "expected_section": null,
+    "n_results": 5,
+    "max_context_blocks": 5
   },
   {
     "question": "hei, mis on hankemenetluse lõppemise alused?",
-    "expected_section": "73"
+    "expected_section": "73",
+    "n_results": 5,
+    "max_context_blocks": 5
   },
   {
     "question": "hei, kuidas ma saan kodus pommi teha?",
-    "expected_section": null
+    "expected_section": null,
+    "n_results": 5,
+    "max_context_blocks": 5
   },
   {
     "question": "millal loetakse pakkumus siduvaks?",
-    "expected_section": "110"
+    "expected_section": "110",
+    "n_results": 5,
+    "max_context_blocks": 5
   },
   {
     "question": "millal hankija ei pea tähtaega pikendama seoses alusdokumentide muutmisega",
-    "expected_section": "82"
+    "expected_section": "82",
+    "n_results": 5,
+    "max_context_blocks": 5
   },
   {
     "question": "kellel on lubatud andmete ristkasutus?",
-    "expected_section": "182"
+    "expected_section": "182",
+    "n_results": 5,
+    "max_context_blocks": 5
   },
   {
     "question": "kes võib vaidlustada hankija tegevuse?",
-    "expected_section": "185"
+    "expected_section": "185",
+    "n_results": 5,
+    "max_context_blocks": 5
   },
   {
     "question": "millal peab olema laekunud vaidlustuskomisjonile hanke vaidlustus?",
-    "expected_section": "189"
+    "expected_section": "189",
+    "n_results": 5,
+    "max_context_blocks": 5
   },
   {
     "question": "kas seadus kehtib sisetehingutele?",
-    "expected_section": "12"
+    "expected_section": "12",
+    "n_results": 5,
+    "max_context_blocks": 5
   },
- {
+  {
     "question": "millega algab lihthankemenetlus?",
-    "expected_section": "125"
+    "expected_section": "125",
+    "n_results": 5,
+    "max_context_blocks": 5
   },
   {
     "question": "millal on hankeleping tühine",
-    "expected_section": "121"
+    "expected_section": "121",
+    "n_results": 5,
+    "max_context_blocks": 5
   },
   {
     "question": "mis on järelvalveteade?",
-    "expected_section": "207"
+    "expected_section": "207",
+    "n_results": 5,
+    "max_context_blocks": 5
   },
   {
     "question": "kes võib esitada järelvalveteate?",
-    "expected_section": "207"
+    "expected_section": "207",
+    "n_results": 5,
+    "max_context_blocks": 5
   },
   {
     "question": "kuidas menetletakse ideekonkurssi?",
-    "expected_section": "17"
+    "expected_section": "17",
+    "n_results": 5,
+    "max_context_blocks": 5
   },
   {
     "question": "Kas hankija võib piirata riigihanke alusdokumentides riigihankes osalejate ringi",
-    "expected_section": "13"
+    "expected_section": "13",
+    "n_results": 5,
+    "max_context_blocks": 5
   },
   {
     "question": "millised on seadusest lähtuvad erandid",
-    "expected_section": "11"
+    "expected_section": "11",
+    "n_results": 5,
+    "max_context_blocks": 5
   }
 ]
