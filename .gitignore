@@ -8,6 +8,12 @@ prompts_change_log.json
 storage/**
 !storage/**/
 !storage/**/.gitkeep
+!storage/raw/laws/
+!storage/raw/laws/**
+!storage/vector_db/
+!storage/vector_db/**
+storage/vector_db_bench*/
+storage/vector_db_bench*/**
 # Ignoreeri venv kataloogi
 .venv/
-*.sqlite3
+# *.sqlite3
