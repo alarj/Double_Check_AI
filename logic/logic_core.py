@@ -52,7 +52,7 @@ def get_ee_time():
     """Tagastab Eesti aja logimiseks."""
     return datetime.now(ZoneInfo("Europe/Tallinn"))
 
-def get_context(query, n_results=5):
+def get_context(query, n_results=5, max_context_blocks=3):
     """
     Teostab RAG-otsingu koos hübriidse skoorimisega (Vektor + Märksõnad).
     Optimeeritud bge-m3 distantsidele.
@@ -103,7 +103,8 @@ def get_context(query, n_results=5):
             return ""
 
         formatted_results = []
-        for sc, s, d in scored_docs[:3]:
+        limit = max(1, int(max_context_blocks or 3))
+        for sc, s, d in scored_docs[:limit]:
             formatted_results.append(f"--- ALLIKAS: {s} ---\n{d}")
             
         return "\n\n".join(formatted_results)

@@ -63,6 +63,7 @@ class MainQueryRequest(BaseModel):
 class RetrievalRequest(BaseModel):
     query: str = Field(..., min_length=1)
     n_results: Optional[int] = Field(5, ge=1, le=25)
+    max_context_blocks: Optional[int] = Field(3, ge=1, le=25)
 
 class PostCheckRequest(BaseModel):
     ai_response: str
@@ -193,13 +194,19 @@ async def run_retrieval(req: RetrievalRequest, user: str = Depends(authenticate)
     start_time_str = time.strftime("%H:%M:%S")
     try:
         n_results = req.n_results or 5
-        context = logic_core.get_context(req.query, n_results=n_results)
+        max_context_blocks = req.max_context_blocks or 3
+        context = logic_core.get_context(
+            req.query,
+            n_results=n_results,
+            max_context_blocks=max_context_blocks,
+        )
         duration = time.time() - start_time
         blocks = [f"--- ALLIKAS:{block}" for block in context.split("--- ALLIKAS:") if block.strip()]
 
         response_data = {
             "query": req.query,
             "n_results": n_results,
+            "max_context_blocks": max_context_blocks,
             "start_time": start_time_str,
             "found": bool(context.strip()),
             "context": context,

@@ -171,13 +171,9 @@ def detect_build_time():
     if git_dir:
         log_head_path = os.path.join(git_dir, "logs", "HEAD")
         try:
-            with open(log_head_path, "r", encoding="utf-8") as f:
-                lines = [line.strip() for line in f.readlines() if line.strip()]
-            if lines:
-                parts = lines[-1].split()
-                if len(parts) >= 6:
-                    timestamp = int(parts[-2])
-                    return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(timestamp))
+            if os.path.exists(log_head_path):
+                timestamp = os.path.getmtime(log_head_path)
+                return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(timestamp))
         except Exception:
             pass
     return "teadmata"
@@ -347,7 +343,8 @@ with st.sidebar:
     st.title("🛡 Seaduste AI")
     is_disabled = st.session_state.processing
     build_time = detect_build_time()
-    build_branch = os.getenv("BUILD_BRANCH", "").strip() or detect_git_branch()
+    build_branch_env = os.getenv("BUILD_BRANCH", "").strip()
+    build_branch = build_branch_env if build_branch_env and build_branch_env != "teadmata" else detect_git_branch()
 
     st.subheader("Serveri sätted")
     st.caption(f"Build aeg: {build_time}")
