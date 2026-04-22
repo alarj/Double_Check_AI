@@ -183,6 +183,14 @@ def detect_build_time():
     return "teadmata"
 
 
+def get_sidebar_title():
+    return "Seaduste AI"
+
+
+def get_page_title():
+    return "Sinu nutikas AI assistent"
+
+
 def load_current_prompts():
     try:
         with open(PROMPTS_FILE, "r", encoding="utf-8") as f:
@@ -336,7 +344,7 @@ if "last_elapsed_sec" not in st.session_state:
 
 # --- SIDEBAR ---
 with st.sidebar:
-    st.title("🛖 Seaduste AI")
+    st.title("🛡 Seaduste AI")
     is_disabled = st.session_state.processing
     build_time = detect_build_time()
     build_branch = os.getenv("BUILD_BRANCH", "").strip() or detect_git_branch()
