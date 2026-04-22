@@ -180,7 +180,7 @@ def detect_build_time():
 
 
 def get_sidebar_title():
-    return "Seaduste AI"
+    return "Turvaline AI"
 
 
 def get_page_title():
@@ -340,7 +340,8 @@ if "last_elapsed_sec" not in st.session_state:
 
 # --- SIDEBAR ---
 with st.sidebar:
-    st.title("🛡 Seaduste AI")
+    st.title(f"🛡 {get_sidebar_title()}")
+    st.caption("*100% vibecoded*")
     is_disabled = st.session_state.processing
     build_time = detect_build_time()
     build_branch_env = os.getenv("BUILD_BRANCH", "").strip()
