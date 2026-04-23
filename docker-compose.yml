@@ -10,7 +10,7 @@ services:
       - "11434:11434"
     restart: always
     # See rida garanteerib, et kõik vajalikud mudelid tõmmatakse automaatselt käivitamisel
-    entrypoint: /bin/sh -c "ollama serve & sleep 10 && ollama pull llama3:8b && ollama pull gemma2:2b && ollama pull mistral && ollama pull phi3 && ollama pull mxbai-embed-large && ollama pull bge-m3 && wait"
+    entrypoint: /bin/sh -c "ollama serve & sleep 10 && ollama pull llama3:8b && ollama pull gemma2:2b && ollama pull mistral && ollama pull phi3 && ollama pull mxbai-embed-large && ollama pull bge-m3 && ollama pull alarjoeste/estonian-normalizer && wait"
 
   logic-app:
     build: ./logic

@@ -4,6 +4,17 @@ __pycache__/
 *log.json
 prompts_change_log.json
 .env
+
+# Ignoreeri kohaliku mudelikausta sisu (hoia kaustastruktuur alles)
+models/**
+!models/**/
+!models/**/.gitkeep
+models/*.gguf
+models/*.bin
+models/*.safetensors
+models/*.pt
+models/*.pth
+
 # Ignoreeri storage sisu, aga hoia struktuur alles
 storage/**
 !storage/**/
