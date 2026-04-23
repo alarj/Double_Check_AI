@@ -58,8 +58,10 @@ def get_context(query, n_results=5, max_context_blocks=3):
     Optimeeritud bge-m3 distantsidele.
     """
     try:
-        # Küsime vektorbaasist kandidaadid
-        results = collection.query(query_texts=[query], n_results=n_results)
+        # Küsime vektorbaasist rohkem kandidaate kui lõppväljundisse vaja,
+        # et Pythonis tehtav ümberreastamine ja dedupe saaks päriselt mõjuda.
+        fetch_k = max(int(n_results or 5), int(max_context_blocks or 3), 5) * 4
+        results = collection.query(query_texts=[query], n_results=fetch_k)
         
         if not results or not results['documents'] or not results['documents'][0]:
             return ""
@@ -69,13 +71,16 @@ def get_context(query, n_results=5, max_context_blocks=3):
         distances = results.get('distances', [[]])[0]
         
         query_words = re.findall(r'\w+', query.lower())
+        query_numbers = re.findall(r'\d[\d\s]*', query.lower())
+        query_stems = {word[:5] for word in query_words if len(word) >= 6}
         scored_docs = []
         seen_snippets = set()
         
         for i, doc in enumerate(docs):
             # Dublikaatide eemaldamine sisu alguse põhjal
             snippet = doc[:100].strip().lower()
-            if snippet in seen_snippets: continue
+            if snippet in seen_snippets:
+                continue
             seen_snippets.add(snippet)
 
             # Skoorimine bge-m3 jaoks:
@@ -85,14 +90,69 @@ def get_context(query, n_results=5, max_context_blocks=3):
             # Märksõnade täiendav kaal (Hübriidne otsing)
             k_score = 0
             doc_lower = doc.lower()
+            meta = metas[i] if i < len(metas) and isinstance(metas[i], dict) else {}
+            display_name = str(meta.get("display_name", "")).lower()
+            para_title = str(meta.get("paragraph_title", "")).lower()
+            chunk_type = str(meta.get("chunk_type", "")).lower()
+            title_text = f"{display_name} {para_title}".strip()
+            title_words = set(re.findall(r'\w+', title_text))
+            title_stems = {word[:5] for word in title_words if len(word) >= 6}
+            doc_words = set(re.findall(r'\w+', doc_lower))
+            doc_stems = {word[:5] for word in doc_words if len(word) >= 6}
+
             for word in query_words:
                 # Anname kaalu ainult sisulistele sõnadele
                 if len(word) > 4 and word in doc_lower:
                     k_score += 0.4
+                if len(word) > 4 and word in para_title:
+                    k_score += 0.45
+                if len(word) > 2 and word in display_name:
+                    k_score += 0.25
+
+            for number in query_numbers:
+                normalized_number = re.sub(r"\s+", "", number)
+                if normalized_number and normalized_number in re.sub(r"\s+", "", doc_lower):
+                    k_score += 0.6
+
+            shared_title_stems = query_stems & title_stems
+            shared_doc_stems = query_stems & doc_stems
+            k_score += 0.18 * len(shared_doc_stems)
+            k_score += 0.3 * len(shared_title_stems)
+
+            if query.lower() in doc_lower:
+                k_score += 0.5
+            if query.lower() in para_title:
+                k_score += 0.4
+            if query.lower() in display_name:
+                k_score += 0.25
+
+            # Kui enamik päringu sisulistest sõnadest elab pealkirjas,
+            # tasub see tõsta kõrgemale ka siis, kui vektorotsing eelistab detailseid erandeid.
+            meaningful_words = {word for word in query_words if len(word) > 4}
+            if meaningful_words:
+                title_overlap = meaningful_words & title_words
+                if len(title_overlap) >= max(1, len(meaningful_words) - 1):
+                    k_score += 0.7
+
+            # Üldiste teemaküsimuste puhul eelistame section/subsection taset punktidele.
+            if len(query_words) <= 5 and chunk_type == "section":
+                k_score += 0.2
+
+            if chunk_type == "subsection":
+                k_score += 0.3
+            elif chunk_type == "section":
+                k_score += 0.15
+            elif chunk_type == "point":
+                k_score -= 0.05
             
             final_score = v_score + k_score
-            source = metas[i].get("source", "RHS") if metas else "RHS"
-            scored_docs.append((final_score, source, doc))
+            source = meta.get("source") or meta.get("law") or "RHS"
+            family_key = (
+                str(meta.get("law", "")),
+                str(meta.get("section", "")),
+                str(meta.get("subsection", "")),
+            )
+            scored_docs.append((final_score, source, doc, family_key))
 
         # Sorteerime tulemused lõpliku hübriidse skoori järgi
         scored_docs.sort(key=lambda x: x[0], reverse=True)
@@ -103,9 +163,15 @@ def get_context(query, n_results=5, max_context_blocks=3):
             return ""
 
         formatted_results = []
+        seen_families = set()
         limit = max(1, int(max_context_blocks or 3))
-        for sc, s, d in scored_docs[:limit]:
+        for sc, s, d, family_key in scored_docs:
+            if family_key in seen_families:
+                continue
+            seen_families.add(family_key)
             formatted_results.append(f"--- ALLIKAS: {s} ---\n{d}")
+            if len(formatted_results) >= limit:
+                break
             
         return "\n\n".join(formatted_results)
         
