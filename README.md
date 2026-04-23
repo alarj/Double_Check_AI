@@ -1,27 +1,29 @@
 ﻿# Double_Check_AI
 
-tegemist on TalTech AI mikrokraadi kursusetĆ¶Ć¶ga
+Tegemist on TalTech AI mikrokraadi kursusetööga.
+Võid vabalt lugeda, kopeerida, endale paigaldada jne. 
+Mõnes oma kirjalikus töös või ettekandes kasutamisel on viisakas viidata :-)
 
-# Double_Check_AI: AI Guardrail PrototĆ¼Ć¼p
+# Double_Check_AI: AI Guardrail Prototüüp
 
-See projekt demonstreerib kahe-astmelist AI turvakihti (Guardrail), mis kasutab kahte erinevat mudelit, et tagada siseandmete turvalisus.
+See projekt demonstreerib mitmeastmelist AI turvakihti (Guardrail), mis kasutab mitut erinevat mudelit, et tagada siseandmete turvalisus.
 
 ## Projekti struktuur
 
 * **`logic/`** - Rakenduse tuumik.
     * `main.py` - Streamliti veebiliides ja AI loogika.
-    * `Dockerfile` - Juhised Pythoni keskkonna ja sĆµltuvuste seadistamiseks.
+    * `Dockerfile` - Juhised Pythoni keskkonna ja sõltuvuste seadistamiseks.
     * `requirements.txt` - Vajalikud Pythoni paketid (Streamlit, Requests jne).
 * **`data_pipeline/`** - Andmete ettevalmistus.
-    * `ingest.py` - Skript XML failide tĆ¶Ć¶tlemiseks ja vektorbaasi saatmiseks.
+    * `ingest.py` - Skript XML failide töötlemiseks ja vektorbaasi saatmiseks.
     * `parsers.py` - Loogika konkreetsete hanke-XML struktuuride lugemiseks.
 * **`storage/`** - (Kohalik andmehoidla, ignoreeritud Gitis)
     * `raw/procurements/` - Koht, kuhu kasutaja paneb oma XML failid.
     * `vector_db/` - ChromaDB poolt genereeritud vektorandmebaas.
 * **`docker-compose.yml`** - Orkestreerib kahte teenust: Ollama (AI mootor) ja Pythoni rakendus.
-* **`.gitignore`** - VĆ¤listab andmete, virtuaalkeskkonna ja mudelite sattumise Giti.
+* **`.gitignore`** - Välistab andmete, virtuaalkeskkonna ja mudelite sattumise Giti.
 
-## Kuidas kĆ¤ivitada
+## Kuidas käivitada
 
 1.  **Klooni projekt ja seadista keskkond:**
     ```bash
@@ -42,23 +44,26 @@ See projekt demonstreerib kahe-astmelist AI turvakihti (Guardrail), mis kasutab 
     sudo apt install docker.io
     sudo apt install docker-compose-v2 -y
     ```
-    Anna oma kasutajale kohe ka Ćµigused, et dockerit ei peaks sudo kaudu iga kord kĆ¤ivitama
+    Anna oma kasutajale kohe ka õigused, et dockerit ei peaks sudo kaudu iga kord käivitama
      ```bash
     sudo usermod -aG docker $USER
     ```
-    Selleks, et ei peaks Ćµiguste muutmiseks vĆ¤lja logima
+    Selleks, et ei peaks õiguste muutmiseks välja logima
     ```bash
     newgrp docker
     ```
-3.  **KĆ¤ivita Docker Compose:**
+3.  **Käivita Docker Compose:**
     ```bash
     docker compose up -d --build
     ```
-    **NB!** Kui kĆ¤sk docker compose up lĆµpetab, kirjuta ```docker ps```, et nĆ¤ha, kas rakendus on "Up" staatuses ja millist porti ta kasutab!
+    **NB!** Kui käsk docker compose up lõpetab, kirjuta ```docker ps```, et näha, kas rakendus on "Up" staatuses ja millist porti ta kasutab!
 
-4.  **Laadi alla AI mudelid (kriitiline samm):**
-    Esmakordsel seadistamisel tuleb mudelid kĆ¤sitsi Ollama konteinerisse tĆµmmata, jĆ¤rgmistel kĆ¤ivitamistel pole seda enam vaja
-	PĆµhimudelid:
+4.  **Laadi alla AI mudelid (optional):**
+    Esmakordsel seadistamisel võib mudelid käsitsi Ollama konteinerisse tõmmata, järgmistel käivitamistel pole seda enam vaja
+	Kõik vajalikud mudelid on kirjeldatud docker-compose.yml failis, seega laeb süsteem need ise konteineri ehitamise käigus alla kui vaja.
+	Mudelite täielik loetelu on allpool Tehnoloogiad punktis
+	
+	Põhimudelid:
     ```bash
     docker exec -it ollama ollama pull gemma2:2b
     docker exec -it ollama ollama pull llama3:8b
@@ -69,35 +74,35 @@ See projekt demonstreerib kahe-astmelist AI turvakihti (Guardrail), mis kasutab 
     ``` 
 	
 5.  **Ava rakendus:**
-    Liides on kĆ¤ttesaadav aadressil `http://<serveri-ip>:8501` (serveri IP-aadressil pordis 8501).
-    **NB!** serveri port 8501 peab olema internetist kĆ¤ttesaadav. VĆµib nĆµuda serveri vĆµi teenuspakkuja keskkonna eraldi hĆ¤Ć¤lestamist turvareeglite osas.
+    Liides on kättesaadav aadressil `http://<serveri-ip>:8501` (serveri IP-aadressil pordis 8501).
+    **NB!** serveri port 8501 peab olema internetist kättesaadav. Võib nõuda serveri või teenuspakkuja keskkonna eraldi häälestamist turvareeglite osas.
 
 ## Andmete ettevalmistus (RAG)
 
-SĆ¼steem kasutab RAG-loogikat (Retrieval-Augmented Generation). Enne rakenduse kasutamist tuleb andmed vektorbaasi laadida. Andmeid saab sisse logeda algandmetest, kui seda on vaja teha, siis tee nii:
+Süsteem kasutab RAG-loogikat (Retrieval-Augmented Generation). Enne rakenduse kasutamist tuleb andmed vektorbaasi laadida. 
+NB!! Hetkel on andmed gitis olemas, seega pole neid igal serveri uuendamisel vaja lisada.
+Andmeid saab sisse logeda algandmetest, kui seda on vaja teha, siis tee nii:
 
 ### Eeltingimused
 - Ollama peab olema installitud ja jooksma.
 
 1.  **Kopeeri andmed**
-    Pane oma hanke-XML failid kausta storage/raw/procurements/
+    
 	Pane seaduste failid storage/raw/laws/
 	
 	
-2.  **KĆ¤ivita indekseerimine**
-    *Hanked:*
+2.  **Käivita indekseerimine**
+    *Hanked (seda pole vaja hetkel):*
 	```bash
     source .venv/bin/activate
     cd data_pipeline
     python3 ingest.py
     ``` 
-	*Seadused:*
+	*Seadused (see töötab ja on testitud):*
 	```bash
-    source .venv/bin/activate
-    cd data_pipeline
-    python3 ingest_laws.py
-    ``` 
-	*Veebi juhendid:*
+    docker exec -it logic-app python data_pipeline/ingest_laws.py
+     ``` 
+	*Veebi juhendid: (seda pole vaja hetkel)*
 	```bash
     source .venv/bin/activate
     cd data_pipeline
@@ -117,11 +122,12 @@ SĆ¼steem kasutab RAG-loogikat (Retrieval-Augmented Generation). Enne rakenduse
 
 ## Turvakihi loogika
 Rakendus oskab kasutada kuni 3 astmelist protsessi:
-1. **Eelkontroll**  analĆ¼Ć¼sib sisendit. Kui see on ohtlik, pĆ¤ringut pĆµhimudelile ei saadeta.
-2. **PĆµhipĆ¤ring**  genereerib vastuse
-3. **JĆ¤relkontroll** kontrollib vĆ¤ljundit, et vĆ¤ltida tundliku info leket vĆµi ebasobivat sisu.
+1. **Eelkontroll**  analüüsib sisendit. Kui see on ohtlik, päringut põhimudelile ei saadeta. Vajadusel üritab kasutaja sisendit normaliseerida.
+2. **Põhipäring**  genereerib vastuse
+3. **Järelkontroll** kontrollib väljundit, et vältida tundliku info leket või ebasobivat sisu.
 
-## Estonian normaliseerija mudel (tiimi serverid)
+## Estonian normaliseerija mudel 
+Normaliseerimise üks variant on kasutada mõnda hästi eesti keelt valdavat mudelit, mitte valmis mudeleid.
 Tiimiliikmed ei pea mudelit ise GGUF-failist looma ega hoidma oma serveris `models/` kaustas suuri mudelifaile.
 Kasutame valmis jagatud mudelit:
 * **`alarjoeste/estonian-normalizer`**
@@ -141,12 +147,12 @@ Kiirtest:
 docker exec -it ollama ollama run alarjoeste/estonian-normalizer "VĆ¤ljasta ainult JSON kujul {\"normalized_query\":\"...\"}. Normaliseeri pĆ¤ring: tere kas te saaksite Ć¶elda kes kinnitab hanke tulemuse"
 ```
 
-`docker-compose.yml` tĆµmbab selle mudeli ka automaatselt `ollama` kĆ¤ivitumisel.
+NB!! `docker-compose.yml` tõmbab selle mudeli ka automaatselt `ollama` käivitumisel, seega pole vaja seda käsitsi laadida.
 
-### Mudeli pĆ¤ritolu ja litsents
+### Mudeli päritolu ja litsents
 * Jagatud mudel: `alarjoeste/estonian-normalizer`
 * Algallikas: EuroLLM-9B-Instruct.Q4_K_M.gguf
 * Litsents: **Apache License 2.0**
 
-KursusetĆ¶Ć¶ raportis tasub fikseerida kasutatud mudelinimi (`alarjoeste/estonian-normalizer`), et tulemused oleksid reprodutseeritavad.
+Kursusetöö raportis tasub fikseerida kasutatud mudelinimi (`alarjoeste/estonian-normalizer`), et tulemused oleksid reprodutseeritavad.
 
