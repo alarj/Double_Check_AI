@@ -20,6 +20,7 @@ services:
       - OLLAMA_BASE_URL=http://ollama:11434
       - BUILD_TIME=${BUILD_TIME:-teadmata}
       - BUILD_BRANCH=${BUILD_BRANCH:-teadmata}
+      - WORKSPACE_DIR=/workspace
     # Käivitame Streamlit rakenduse
     command: >
       streamlit run main.py 
@@ -34,10 +35,10 @@ services:
       - "8501:8501"
     volumes:
       - ./logic:/app
-      - ./:/workspace:ro
-      - ./storage/vector_db:/app/chroma_db
       - ./data_pipeline:/app/data_pipeline
       - ./storage:/app/storage
+      # Read-only kogu repo mount ainult git-meta ja debugi jaoks.
+      - ./:/workspace:ro
     restart: always  
 
   api:
@@ -48,12 +49,13 @@ services:
       - OLLAMA_BASE_URL=http://ollama:11434
       - BUILD_TIME=${BUILD_TIME:-teadmata}
       - BUILD_BRANCH=${BUILD_BRANCH:-teadmata}
+      - WORKSPACE_DIR=/workspace
     command: uvicorn api:app --host 0.0.0.0 --port 8000
     volumes:
       - ./logic:/app
-      - ./storage/vector_db:/app/chroma_db
       - ./storage:/app/storage
       - ./testing:/testing
+      - ./:/workspace:ro
     ports:
       - "8000:8000"
     depends_on:
@@ -77,6 +79,7 @@ services:
       - ./logic:/app
       - ./testing:/testing  # <--- SEE RIDA ÜHENDAB TESTID
       - ./storage:/app/storage
+      - ./:/workspace:ro
     restart: always  
 
 volumes:

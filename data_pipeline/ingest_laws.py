@@ -50,6 +50,9 @@ def normalize_text(text):
     """Normaliseerib tühikud ja hoiab kirjavahemärgid loetavad."""
     if not text:
         return ""
+    # XML allikates võivad ühikud ja arvud olla kokku kirjutatud (nt 60000eurot).
+    text = re.sub(r"(?<=\d)(?=[A-Za-zÕÄÖÜõäöü])", " ", text)
+    text = re.sub(r"(?<=[A-Za-zÕÄÖÜõäöü])(?=\d)", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
     text = re.sub(r"\s+([,.;:!?])", r"\1", text)
     return text
@@ -86,8 +89,8 @@ def serialize_legal_structure(element):
                 structured_parts.append(child_text)
             continue
 
-        if tag == "alapunkt":
-            marker = get_numbered_marker(child, "{*}alapunktNr")
+        if tag == "alampunkt":
+            marker = get_numbered_marker(child, "{*}alampunktNr")
             child_text = serialize_legal_structure(child)
             if child_text:
                 structured_parts.append(f"{marker} {child_text}")
@@ -212,7 +215,7 @@ def parse_xml_to_legal_chunks(file_path):
             else:
                 for lg in loiked:
                     lg_nr = (lg.find("{*}loigeNr").text or "") if lg.find("{*}loigeNr") is not None else ""
-                    punktid = lg.findall(".//{*}alapunkt")
+                    punktid = lg.findall(".//{*}alampunkt")
                     
                     if not punktid:
                         content = get_clean_text(lg)
@@ -225,8 +228,10 @@ def parse_xml_to_legal_chunks(file_path):
                         # Intro tekst (punktide sissejuhatus)
                         intro_parts = []
                         for child in lg:
-                            if strip_ns(child.tag) == "alapunkt":
+                            if strip_ns(child.tag) == "alampunkt":
                                 break
+                            if strip_ns(child.tag) in {"loigeNr", "kuvatavNr"}:
+                                continue
                             child_text = extract_text_with_spacing(child)
                             if child_text:
                                 intro_parts.append(child_text)
@@ -240,7 +245,7 @@ def parse_xml_to_legal_chunks(file_path):
                             metadatas.append(create_meta(lg_prefix, "subsection", lg=lg_nr))
 
                         for p in punktid:
-                            p_nr = (p.find("{*}alapunktNr").text or "") if p.find("{*}alapunktNr") is not None else ""
+                            p_nr = (p.find("{*}alampunktNr").text or "") if p.find("{*}alampunktNr") is not None else ""
                             p_content = get_clean_text(p)
                             if p_content:
                                 prefix = f"{law_abbr} § {para_nr} lg {lg_nr} p {p_nr}"

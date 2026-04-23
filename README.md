@@ -100,7 +100,7 @@ Andmeid saab sisse logeda algandmetest, kui seda on vaja teha, siis tee nii:
     ``` 
 	*Seadused (see töötab ja on testitud):*
 	```bash
-    docker exec -it logic-app python data_pipeline/ingest_laws.py
+    docker exec -it logic-app python /app/data_pipeline/ingest_laws.py
      ``` 
 	*Veebi juhendid: (seda pole vaja hetkel)*
 	```bash
