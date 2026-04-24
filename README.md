@@ -27,12 +27,13 @@ See projekt demonstreerib mitmeastmelist AI turvakihti (Guardrail), mis kasutab 
 
 1.  **Klooni projekt ja seadista keskkond:**
     ```bash
-    git clone [https://github.com/alarj/Double_Check_AI.git](https://github.com/alarj/Double_Check_AI.git)
+    git clone https://github.com/alarj/Double_Check_AI.git
     cd Double_Check_AI
     git checkout main
     ```
-	**Loo ja aktiveeri virtuaalkeskkond (andmete laadimiseks)**
-    ```bash
+	**Kui soovid, siis loo ja aktiveeri virtuaalkeskkond**
+    Kuna kogu rakendus töötab dockeri konteinerites, siis venv osa võib vahele jätta, seda pole reaalselt vaja.
+	```bash
 	python3 -m venv .venv
     source .venv/bin/activate
     pip install -r requirements.txt
@@ -60,8 +61,10 @@ See projekt demonstreerib mitmeastmelist AI turvakihti (Guardrail), mis kasutab 
 
 4.  **Laadi alla AI mudelid (optional):**
     Esmakordsel seadistamisel võib mudelid käsitsi Ollama konteinerisse tõmmata, järgmistel käivitamistel pole seda enam vaja
-	Kõik vajalikud mudelid on kirjeldatud docker-compose.yml failis, seega laeb süsteem need ise konteineri ehitamise käigus alla kui vaja.
+	Kõik vajalikud mudelid on kirjeldatud ka docker-compose.yml failis, seega laeb süsteem need ise konteineri ehitamise käigus alla kui vaja.
 	Mudelite täielik loetelu on allpool Tehnoloogiad punktis
+
+	**Vaikimisi eeldatakse**
 	
 	Põhimudelid:
     ```bash
@@ -70,17 +73,18 @@ See projekt demonstreerib mitmeastmelist AI turvakihti (Guardrail), mis kasutab 
     ``` 
 	Embedding mudel RAG jaoks:
 	```bash
-    docker exec -it ollama ollama pull mxbai-embed-large
+    docker exec -it ollama ollama pull bge-m3
     ``` 
 	
 5.  **Ava rakendus:**
     Liides on kättesaadav aadressil `http://<serveri-ip>:8501` (serveri IP-aadressil pordis 8501).
-    **NB!** serveri port 8501 peab olema internetist kättesaadav. Võib nõuda serveri või teenuspakkuja keskkonna eraldi häälestamist turvareeglite osas.
+	REST API swagger on kättesaadav `http://<serveri-ip>:8000/swagger` (serveri IP-aadressil pordis 8000)
+    **NB!** serveri port 8501 ja 8000 peavad olema internetist kättesaadavad. Võib nõuda serveri või teenuspakkuja keskkonna eraldi häälestamist turvareeglite osas.
 
 ## Andmete ettevalmistus (RAG)
 
 Süsteem kasutab RAG-loogikat (Retrieval-Augmented Generation). Enne rakenduse kasutamist tuleb andmed vektorbaasi laadida. 
-NB!! Hetkel on andmed gitis olemas, seega pole neid igal serveri uuendamisel vaja lisada.
+**NB!! Hetkel on andmed gitis olemas, seega pole neid igal serveri uuendamisel vaja lisada.**
 Andmeid saab sisse logeda algandmetest, kui seda on vaja teha, siis tee nii:
 
 ### Eeltingimused
@@ -92,7 +96,7 @@ Andmeid saab sisse logeda algandmetest, kui seda on vaja teha, siis tee nii:
 	
 	
 2.  **Käivita indekseerimine**
-    *Hanked (seda pole vaja hetkel):*
+    *Hanked (seda pole vaja hetkel, ära kasuta):*
 	```bash
     source .venv/bin/activate
     cd data_pipeline
@@ -102,7 +106,7 @@ Andmeid saab sisse logeda algandmetest, kui seda on vaja teha, siis tee nii:
 	```bash
     docker exec -it logic-app python /app/data_pipeline/ingest_laws.py
      ``` 
-	*Veebi juhendid: (seda pole vaja hetkel)*
+	*Veebi juhendid: (seda pole vaja hetkel, ära kasuta)*
 	```bash
     source .venv/bin/activate
     cd data_pipeline
