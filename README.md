@@ -32,7 +32,8 @@ See projekt demonstreerib mitmeastmelist AI turvakihti (Guardrail), mis kasutab 
     git checkout main
     ```
 	**Kui soovid, siis loo ja aktiveeri virtuaalkeskkond**
-    Kuna kogu rakendus töötab dockeri konteinerites, siis venv osa võib vahele jätta, seda pole reaalselt vaja.
+    **NB!** Kuna kogu rakendus töötab dockeri konteinerites, siis selle venv osa võib vahele jätta, seda pole reaalselt vaja.
+	Kõiki käske ja teste on mõistlik jooksutada dockeris
 	```bash
 	python3 -m venv .venv
     source .venv/bin/activate
@@ -158,5 +159,23 @@ NB!! `docker-compose.yml` tõmbab selle mudeli ka automaatselt `ollama` käivitu
 * Algallikas: EuroLLM-9B-Instruct.Q4_K_M.gguf
 * Litsents: **Apache License 2.0**
 
-Kursusetöö raportis tasub fikseerida kasutatud mudelinimi (`alarjoeste/estonian-normalizer`), et tulemused oleksid reprodutseeritavad.
+## Automaattestid
+Süsteemis on olemas järgmised testid, mis asuvad /testing/ kataloogis:
+
+* **bench-pre-check.py** -- pre-check test, testilood failis pre_check_dataset.json
+* **bench-post-check.py** -- post-check test, testilood failis post_check_dataset.json
+* **retr-test.py** -- retrieval (vektorbaasi päring) test, testilood failis retrieval_dataset.json
+* **llm-test.py** -- põhipäringu test, testilood failis main_llm_dataset.json
+* **benchmark_embeddings.py** -- testib erinevaid embeddingu mudeleid, st **NB!** koostab erinevate mudelitega vektorandmebaasid ja võrdleb neid omavahel. Veidi ajas maha jäänud. 
+
+Kõik testid koostavad ka logi nii ekraanile kui .json formaadis sinnasamasse /testing/ kataloogi. Logid on nähtavad ka UI kaudu ja API teenuses /logs Mõlemast saab neid alla laadida ja oma arvutis säilitada või edasi uurida.
+**NB!** Hetkel serveri käsureal kuvatav info ei kajastu logifailis -- see tuleb eraldi ära salvestada. Selle lisamine logisse on üks ToDo task ;-)
+
+* Testid käivitatakse serveri käsurealt 
+```bash
+docker exec -it test-app python /testing/testifaili_nimi.py
+```
+(testifaili_nimi.py asemele tuleb siis kirjutada õige faili nimi vastavalt eespool olevale infole)
+
+ 
 
