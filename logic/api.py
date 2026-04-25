@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, status, Query
+﻿from fastapi import FastAPI, Depends, HTTPException, status, Query
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 import logic_core
 import json
@@ -7,7 +7,7 @@ import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Optional, List, Literal
 
 # --- KONFIGURATSIOON ---
 app = FastAPI(
@@ -27,21 +27,22 @@ TEST_LOG_FILES = {
     "test-llm": "/testing/llm-test-log.json",
     "test-retrieval": "/testing/retr-test-log.json",
     "test-benchmark-embeddings": "/testing/benchmark_embeddings-log.json",
+    "test-normalizer": "/testing/normalizer-test-log.json",
     "prompts-change": "/app/prompts_change_log.json",
 }
 
 
 def ee_now_str(fmt: str = "%Y-%m-%d %H:%M:%S") -> str:
-    """Tagastab kellaaja Eesti ajavööndis."""
+    """Tagastab kellaaja Eesti ajavĆ¶Ć¶ndis."""
     return datetime.now(ZoneInfo("Europe/Tallinn")).strftime(fmt)
 
 # --- AUTENTIMINE ---
 def authenticate(credentials: HTTPBasicCredentials = Depends(security)):
-    """Põhiline HTTP Basic autentimine."""
+    """PĆµhiline HTTP Basic autentimine."""
     if credentials.username != "admin" or credentials.password != "parool":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, 
-            detail="Vale kasutajanimi või parool",
+            detail="Vale kasutajanimi vĆµi parool",
             headers={"WWW-Authenticate": "Basic"},
         )
     return credentials.username
@@ -50,7 +51,14 @@ def authenticate(credentials: HTTPBasicCredentials = Depends(security)):
 class PreCheckRequest(BaseModel):
     user_input: str
     model: str = "gemma2:2b"
+    normalization_mode: Literal["precheck", "external", "off"] = "precheck"
     timeout: Optional[int] = 60
+    threads: Optional[int] = 4
+
+class NormalizeRequest(BaseModel):
+    user_input: str
+    model: str = "alarjoeste/estonian-normalizer"
+    timeout: Optional[int] = 90
     threads: Optional[int] = 4
 
 class MainQueryRequest(BaseModel):
@@ -67,11 +75,11 @@ class RetrievalRequest(BaseModel):
 
 class PostCheckRequest(BaseModel):
     ai_response: str
-    # Pre-check "user_input" (algne, töötlemata küsimus)
+    # Pre-check "user_input" (algne, tĆ¶Ć¶tlemata kĆ¼simus)
     original_user_input: Optional[str] = Field(None, min_length=1)
-    # Pre-check väljund (normaliseeritud küsimus), mille alusel tehti põhiküsimus/RAG
+    # Pre-check vĆ¤ljund (normaliseeritud kĆ¼simus), mille alusel tehti pĆµhikĆ¼simus/RAG
     normalized_query: Optional[str] = ""
-    # Kontekst, mille alusel põhipäring LLM-s tehti (RAG kontekst)
+    # Kontekst, mille alusel pĆµhipĆ¤ring LLM-s tehti (RAG kontekst)
     context: Optional[str] = ""
     # Backward compatibility varasema kliendi jaoks
     original_query: Optional[str] = None
@@ -81,7 +89,7 @@ class PostCheckRequest(BaseModel):
 
 # --- LOGIMINE ---
 def log_api_call(endpoint: str, status_code: int, duration: float, user: str, extra_data: dict = None):
-    """Logib API päringu info faili."""
+    """Logib API pĆ¤ringu info faili."""
     log_entry = {
         "timestamp": ee_now_str(),
         "endpoint": endpoint,
@@ -105,14 +113,18 @@ def log_api_call(endpoint: str, status_code: int, duration: float, user: str, ex
 @app.post("/pre-check", tags=["Valideerimine"])
 async def pre_check(req: PreCheckRequest, user: str = Depends(authenticate)):
     """
-    Kontrollib sisendi turvalisust ja sobivust enne põhipäringut.
-    Võimaldab määrata mudelit, timeouti ja lõimede arvu.
+    Kontrollib sisendi turvalisust ja sobivust enne pĆµhipĆ¤ringut.
+    VĆµimaldab mĆ¤Ć¤rata mudelit, timeouti ja lĆµimede arvu.
     """
     start_time = time.time()
     start_time_str = time.strftime("%H:%M:%S")
     try:
-        # Võtame õige võtmega prompti failist
-        sys_prompt = logic_core.PROMPTS.get("PRE_CHECK_PROMPT", "{u_input}")
+        # VĆµtame Ćµige vĆµtmega prompti failist
+        use_precheck_normalization = req.normalization_mode == "precheck"
+        prompt_key = "PRE_CHECK_PROMPT" if use_precheck_normalization else "PRE_CHECK_SECURITY_ONLY_PROMPT"
+        sys_prompt = logic_core.PROMPTS.get(prompt_key)
+        if not sys_prompt:
+            raise RuntimeError(f"Prompt puudub: {prompt_key}")
         # Asendame promptis oleva muutuja tegeliku sisendiga
         full_prompt = sys_prompt.replace("{u_input}", req.user_input)
         
@@ -127,12 +139,44 @@ async def pre_check(req: PreCheckRequest, user: str = Depends(authenticate)):
         # Parsime Ollama string vastuse reaalseks JSONiks
         parsed_result = logic_core.parse_json_res(result)
         
+        status_value = parsed_result.get("status", "BLOCKED")
+        normalized_value = parsed_result.get("normalized_query", "") if use_precheck_normalization else req.user_input
+        reason_value = parsed_result.get("reason", "")
+        if not use_precheck_normalization and status_value != "ALLOWED" and not reason_value:
+            reason_value = "Päring ei läbinud turvakontrolli."
+
+        # Kui kombineeritud pre-check (turva + normaliseerimine) annab BLOCKED
+        # ilma sisulise põhjenduseta, teeme teise hinnangu security-only promptiga.
+        # See vähendab valepositiivseid blokeeringuid lihtsate domeeniküsimuste puhul.
+        if use_precheck_normalization and status_value == "BLOCKED" and not reason_value:
+            sec_prompt = logic_core.PROMPTS.get("PRE_CHECK_SECURITY_ONLY_PROMPT")
+            if sec_prompt:
+                sec_full_prompt = sec_prompt.replace("{u_input}", req.user_input)
+                sec_result = logic_core.ask_ollama(
+                    req.model,
+                    sec_full_prompt,
+                    req.threads,
+                    req.timeout
+                )
+                sec_parsed = logic_core.parse_json_res(sec_result)
+                sec_status = sec_parsed.get("status", "BLOCKED")
+                sec_reason = sec_parsed.get("reason", "")
+                if sec_status == "ALLOWED":
+                    status_value = "ALLOWED"
+                    reason_value = ""
+                elif sec_reason:
+                    reason_value = sec_reason
+
         response_data = {
             "model": req.model,
+            "normalization_mode": req.normalization_mode,
+            "prompt_key": prompt_key,
             "prompt": full_prompt,
             "start_time": start_time_str,
-            "status": parsed_result.get("status", "BLOCKED"),
-            "normalized": parsed_result.get("normalized_query", ""),
+            "status": status_value,
+            "normalized": normalized_value,
+            "reason": reason_value,
+            "normalization_applied": use_precheck_normalization,
             "duration": round(duration * 1000, 2),
             "raw_response": result
         }
@@ -143,16 +187,74 @@ async def pre_check(req: PreCheckRequest, user: str = Depends(authenticate)):
         log_api_call("/pre-check", 500, 0, user, {"error": str(e)})
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/query", tags=["Põhipäring"])
+
+@app.post("/normalize", tags=["Valideerimine"])
+async def normalize_query(req: NormalizeRequest, user: str = Depends(authenticate)):
+    """
+    Normaliseerib kasutaja sisendi eraldi normaliseerimismudeli abil.
+    """
+    start_time = time.time()
+    start_time_str = time.strftime("%H:%M:%S")
+    try:
+        sys_prompt = logic_core.PROMPTS.get("NORMALIZE_QUERY_PROMPT")
+        if not sys_prompt:
+            raise RuntimeError("Prompt puudub: NORMALIZE_QUERY_PROMPT")
+        full_prompt = sys_prompt.replace("{u_input}", req.user_input)
+
+        result = logic_core.ask_ollama(
+            req.model,
+            full_prompt,
+            req.threads,
+            req.timeout
+        )
+        duration = time.time() - start_time
+        if isinstance(result, str) and result.startswith("VIGA:"):
+            log_api_call(
+                "/normalize",
+                504,
+                duration,
+                user,
+                {
+                    "model": req.model,
+                    "prompt_key": "NORMALIZE_QUERY_PROMPT",
+                    "prompt": full_prompt,
+                    "start_time": start_time_str,
+                    "error": result,
+                },
+            )
+            raise HTTPException(status_code=504, detail=result)
+
+        parsed_result = logic_core.parse_json_res(result)
+        normalized_value = parsed_result.get("normalized_query", "").strip() or req.user_input
+
+        response_data = {
+            "model": req.model,
+            "prompt_key": "NORMALIZE_QUERY_PROMPT",
+            "prompt": full_prompt,
+            "start_time": start_time_str,
+            "normalized": normalized_value,
+            "duration": round(duration * 1000, 2),
+            "raw_response": result
+        }
+
+        log_api_call("/normalize", 200, duration, user, response_data)
+        return response_data
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_api_call("/normalize", 500, 0, user, {"error": str(e)})
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/query", tags=["PĆµhipĆ¤ring"])
 async def run_query(req: MainQueryRequest, user: str = Depends(authenticate)):
     """
-    Saadab kasutaja päringu tehisintellektile.
+    Saadab kasutaja pĆ¤ringu tehisintellektile.
     Konfigureeritav: model, timeout, threads.
     """
     start_time = time.time()
     start_time_str = time.strftime("%H:%M:%S")
     try:
-        # Võtame prompti prompts.json failist ning täidame sisendparameetritega
+        # VĆµtame prompti prompts.json failist ning tĆ¤idame sisendparameetritega
         rag_prompt_template = logic_core.PROMPTS.get("RAG_PROMPT", "{context}\n{query}")
         full_prompt = (
             rag_prompt_template
@@ -188,7 +290,7 @@ async def run_query(req: MainQueryRequest, user: str = Depends(authenticate)):
 @app.post("/retrieval", tags=["Retrieval"])
 async def run_retrieval(req: RetrievalRequest, user: str = Depends(authenticate)):
     """
-    Toob vektorbaasist RAG konteksti antud päringu jaoks.
+    Toob vektorbaasist RAG konteksti antud pĆ¤ringu jaoks.
     """
     start_time = time.time()
     start_time_str = time.strftime("%H:%M:%S")
@@ -224,7 +326,7 @@ async def run_retrieval(req: RetrievalRequest, user: str = Depends(authenticate)
 @app.post("/post-check", tags=["Valideerimine"])
 async def post_check(req: PostCheckRequest, user: str = Depends(authenticate)):
     """
-    Kontrollib AI vastuse vastavust algsele küsimusele (hallutsinatsioonide vältimine).
+    Kontrollib AI vastuse vastavust algsele kĆ¼simusele (hallutsinatsioonide vĆ¤ltimine).
     """
     start_time = time.time()
     start_time_str = time.strftime("%H:%M:%S")
@@ -235,16 +337,16 @@ async def post_check(req: PostCheckRequest, user: str = Depends(authenticate)):
         if not req.original_user_input:
             raise HTTPException(status_code=422, detail="Missing required field: original_user_input (or legacy original_query)")
 
-        # Võtame õige võtmega prompti failist
+        # VĆµtame Ćµige vĆµtmega prompti failist
         sys_prompt = logic_core.PROMPTS.get("POST_CHECK_PROMPT", "{u_input}\n{main_res}")
-        # Asendame kohamärgised vastavalt failile prompts.json
+        # Asendame kohamĆ¤rgised vastavalt failile prompts.json
         full_prompt = (
             sys_prompt
             .replace("{u_input}", req.original_user_input)
             .replace("{context}", (req.context or "").strip() or "Puudub")
             .replace("{main_res}", req.ai_response)
         )
-        # Kui prompt kasutab lisa-kohamärke, täidame ka need (kui olemas)
+        # Kui prompt kasutab lisa-kohamĆ¤rke, tĆ¤idame ka need (kui olemas)
         full_prompt = full_prompt.replace("{normalized_query}", (req.normalized_query or "").strip() or req.original_user_input)
         
         result = logic_core.ask_ollama(
@@ -279,7 +381,7 @@ async def post_check(req: PostCheckRequest, user: str = Depends(authenticate)):
         log_api_call("/post-check", 500, 0, user, {"error": str(e)})
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/logs", tags=["Süsteem"])
+@app.get("/logs", tags=["SĆ¼steem"])
 def get_logs(
     user: str = Depends(authenticate), 
     source: str = Query(
@@ -292,14 +394,15 @@ def get_logs(
             "test-llm",
             "test-retrieval",
             "test-benchmark-embeddings",
+            "test-normalizer",
             "prompts-change",
         ],
     ),
     limit: int = Query(50, description="Mitut viimast rida kuvada"),
     start: Optional[str] = Query(None, description="Algusaeg (YYYY-MM-DD HH:MM:SS)"),
-    end: Optional[str] = Query(None, description="Lõpuaeg (YYYY-MM-DD HH:MM:SS)")
+    end: Optional[str] = Query(None, description="LĆµpuaeg (YYYY-MM-DD HH:MM:SS)")
 ):
-    """Tagastab süsteemi logid filtreeritult."""
+    """Tagastab sĆ¼steemi logid filtreeritult."""
     if source == "api":
         path = API_LOG_FILE
     elif source == "ui":
@@ -347,7 +450,7 @@ def get_logs(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/health", tags=["Süsteem"])
+@app.get("/health", tags=["SĆ¼steem"])
 def health_check():
     """Kontrollib teenuse ja Ollama olekut."""
     ollama_status = "unknown"
@@ -370,5 +473,5 @@ def health_check():
 
 if __name__ == "__main__":
     import uvicorn
-    # Käivitab serveri pordil 8000
+    # KĆ¤ivitab serveri pordil 8000
     uvicorn.run(app, host="0.0.0.0", port=8000)

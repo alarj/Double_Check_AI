@@ -36,8 +36,12 @@ def load_prompts():
     """Laeb süsteemi juhised ja mallid JSON failist."""
     try:
         if os.path.exists(PROMPTS_FILE):
-            with open(PROMPTS_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
+            # utf-8-sig loeb korrektselt ka BOM-iga JSON failid
+            # (nt kui fail on salvestatud Windowsi tööriistadega).
+            with open(PROMPTS_FILE, "r", encoding="utf-8-sig") as f:
+                data = json.load(f)
+                if isinstance(data, dict):
+                    return data
         return {}
     except Exception as e:
         print(f"VIGA PROMPTIDE LAADIMISEL: {e}")

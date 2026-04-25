@@ -1,0 +1,92 @@
+[
+  {
+    "id": "NZ-000",
+    "question": "kui suur on lihthanke piirmäär",
+    "normalizer_metadata": {
+      "desc": "Lihthanke piirmäära küsimus peab säilitama võtmeterminid",
+      "must_contain_any": [["lihthanke", "liht hanke"], ["piirmäär", "piirmaar"]]
+    }
+  },
+  {
+    "id": "NZ-001",
+    "question": "tere kas te saaksite oelda kui suur on lihthanke piirmaar",
+    "normalizer_metadata": {
+      "desc": "Filler eemaldamine, sisu sailib",
+      "must_contain_any": [["lihthanke", "liht hanke"], ["piirmaar", "piirmäär"]],
+      "must_not_contain": ["tere", "kas te saaksite oelda", "palun"]
+    }
+  },
+  {
+    "id": "NZ-002",
+    "question": "kes kinnitab hanke tulemuse",
+    "normalizer_metadata": {
+      "desc": "RHS termini rikastamine",
+      "must_contain_any": [["kinnit", "otsuse"], ["pakkumus", "pakkumuse"], ["eduk", "tunnist"]]
+    }
+  },
+  {
+    "id": "NZ-003",
+    "question": "mille alusel valitakse edukas pakkumus",
+    "normalizer_metadata": {
+      "desc": "Edukaks tunnistamise kysimus",
+      "must_contain_any": [["eduk", "tunnist"], ["pakkumus", "pakkumuse"]]
+    }
+  },
+  {
+    "id": "NZ-004",
+    "question": "kuidas vaidlustus esitada lihthankes",
+    "normalizer_metadata": {
+      "desc": "Vaidlustus + lihthange peab sailima",
+      "must_contain_any": [["vaidlust", "vaidlus"], ["lihthanke", "liht hanke"]]
+    }
+  },
+  {
+    "id": "NZ-005",
+    "question": "palun selgita mis on RHS paragrahv 14",
+    "normalizer_metadata": {
+      "desc": "Filler eemaldus ja viide RHS",
+      "must_contain_any": [["rhs", "riigihangete seadus"], ["14", "paragrahv 14"]],
+      "must_not_contain": ["palun selgita"]
+    }
+  },
+  {
+    "id": "NZ-006",
+    "question": "leping katki millal tohib",
+    "normalizer_metadata": {
+      "desc": "Slang formaliseeritakse",
+      "must_contain_any": [["hankelepingu", "lepingu"], ["ulesutlem", "ülesütlem"]]
+    }
+  },
+  {
+    "id": "NZ-007",
+    "question": "mis tingimustel voib hankija pakkuja korvaldada",
+    "normalizer_metadata": {
+      "desc": "Hankija ja korvaldamine",
+      "must_contain_any": [["hankija"], ["korvaldam", "kõrvaldam"]]
+    }
+  },
+  {
+    "id": "NZ-008",
+    "question": "kas sa tead mitu kangurut elab austraalias",
+    "normalizer_metadata": {
+      "desc": "Teemavaline sisend peaks tagasi tulema sisuliselt samana",
+      "must_contain_any": [["kangurut", "austraalia"]]
+    }
+  },
+  {
+    "id": "NZ-009",
+    "question": "kuidas koostada hanke alusdokumente",
+    "normalizer_metadata": {
+      "desc": "Alusdokumentide termin",
+      "must_contain_any": [["alusdokument", "hanke alus"]]
+    }
+  },
+  {
+    "id": "NZ-010",
+    "question": "mis vahe on lihthankel ja avatud hankemenetlusel",
+    "normalizer_metadata": {
+      "desc": "Vordlus kahe menetluse vahel",
+      "must_contain_any": [["lihthanke", "liht hanke"], ["avatud", "hankemenetlus"]]
+    }
+  }
+]

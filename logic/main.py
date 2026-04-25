@@ -1,4 +1,4 @@
-import base64
+﻿import base64
 import json
 import os
 import subprocess
@@ -18,12 +18,13 @@ API_USER = os.getenv("API_USER", "admin")
 API_PASSWORD = os.getenv("API_PASSWORD", "parool")
 DEFAULT_GUARD = "gemma2:2b"
 DEFAULT_MAIN = "llama3:8b"
+DEFAULT_NORMALIZER = "alarjoeste/estonian-normalizer"
 WORKSPACE_DIR = os.getenv("WORKSPACE_DIR", "/workspace")
 total_cores = os.cpu_count() or 1
 
 
 def log_json_event(data):
-    """Kirjutab sündmuse logifaili JSON formaadis."""
+    """Kirjutab sĆ¼ndmuse logifaili JSON formaadis."""
     try:
         with open(LOG_FILE, "a", encoding="utf-8") as f:
             f.write(json.dumps(data, ensure_ascii=False) + "\n")
@@ -52,7 +53,7 @@ def append_prompt_change_log(old_prompts, new_prompts):
         with open(PROMPTS_CHANGE_LOG_FILE, "w", encoding="utf-8") as f:
             json.dump(existing, f, indent=2, ensure_ascii=False)
     except Exception as e:
-        st.error(f"Prompti muutuse logimine ebaõnnestus: {e}")
+        st.error(f"Prompti muutuse logimine ebaĆµnnestus: {e}")
 
 
 def fetch_logs_via_api(source, limit=50):
@@ -91,6 +92,59 @@ def fetch_retrieval_context_via_api(query_text, n_results=5):
             return data.get("context", ""), data, None
     except Exception as e:
         return "", None, str(e)
+
+
+def fetch_precheck_via_api(user_input, model, normalization_mode, threads, timeout):
+    """Toob eelkontrolli tulemuse REST API /pre-check endpointist."""
+    try:
+        auth_token = base64.b64encode(f"{API_USER}:{API_PASSWORD}".encode("utf-8")).decode("utf-8")
+        payload = json.dumps({
+            "user_input": user_input,
+            "model": model,
+            "normalization_mode": normalization_mode,
+            "threads": int(threads),
+            "timeout": int(timeout),
+        }).encode("utf-8")
+        req = urllib.request.Request(
+            f"{API_BASE_URL}/pre-check",
+            data=payload,
+            headers={
+                "Authorization": f"Basic {auth_token}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=int(timeout) + 30) as res:
+            data = json.loads(res.read().decode("utf-8"))
+            return data, None
+    except Exception as e:
+        return None, str(e)
+
+
+def fetch_normalized_query_via_api(user_input, model, threads, timeout):
+    """Toob normaliseeritud pÄ†Ā¤ringu REST API /normalize endpointist."""
+    try:
+        auth_token = base64.b64encode(f"{API_USER}:{API_PASSWORD}".encode("utf-8")).decode("utf-8")
+        payload = json.dumps({
+            "user_input": user_input,
+            "model": model,
+            "threads": int(threads),
+            "timeout": int(timeout),
+        }).encode("utf-8")
+        req = urllib.request.Request(
+            f"{API_BASE_URL}/normalize",
+            data=payload,
+            headers={
+                "Authorization": f"Basic {auth_token}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=int(timeout) + 30) as res:
+            data = json.loads(res.read().decode("utf-8"))
+            return data, None
+    except Exception as e:
+        return None, str(e)
 
 
 def run_git_command(args):
@@ -156,7 +210,7 @@ def detect_git_branch():
 
 
 def detect_build_time():
-    """Tagastab build aja või viimase commit'i aja."""
+    """Tagastab build aja vĆµi viimase commit'i aja."""
     build_time = os.getenv("BUILD_TIME", "").strip()
     if build_time and build_time != "teadmata":
         return build_time
@@ -189,7 +243,8 @@ def get_page_title():
 
 def load_current_prompts():
     try:
-        with open(PROMPTS_FILE, "r", encoding="utf-8") as f:
+        # BOM-safe lugemine, et prompts editor töötaks ka utf-8-sig failidega.
+        with open(PROMPTS_FILE, "r", encoding="utf-8-sig") as f:
             return json.load(f)
     except Exception:
         return logic_core.PROMPTS
@@ -201,7 +256,7 @@ def render_prompt_editor():
 
     with prompt_section:
         st.divider()
-        st.subheader("📝 Süsteemi promptide haldus")
+        st.subheader("\U0001F4AF Süsteemi promptide haldus")
         current_prompts = load_current_prompts()
         prompts_text = json.dumps(current_prompts, indent=2, ensure_ascii=False)
         st.json(current_prompts)
@@ -244,7 +299,7 @@ def render_logs():
 
     with logs_section:
         st.divider()
-        st.subheader("📋 Viimased tegevused")
+        st.subheader("\U0001F4CB Viimased tegevused")
         log_options = [
             "ui",
             "api",
@@ -253,6 +308,7 @@ def render_logs():
             "test-llm",
             "test-retrieval",
             "test-benchmark-embeddings",
+            "test-normalizer",
             "prompts-change",
         ]
         log_source = st.selectbox(
@@ -274,11 +330,11 @@ def render_logs():
                     continue
                 status_value = entry.get("final_status") or entry.get("status")
                 if status_value in ("OK", "ALLOWED"):
-                    marker = "🟢"
+                    marker = "\U0001F7E2"  # green circle
                 elif status_value in ("BLOCKED", "ERROR"):
-                    marker = "🔴"
+                    marker = "\U0001F534"  # red circle
                 else:
-                    marker = "🟡"
+                    marker = "\U0001F7E1"  # yellow circle
                 title_text = entry.get("user_input") or entry.get("endpoint") or "logikirje"
                 label = f"{marker} {entry.get('timestamp', '---')} | {str(title_text)[:40]}"
                 with st.expander(label):
@@ -289,34 +345,35 @@ def render_status_messages():
     status_placeholder.empty()
     if st.session_state.status_messages:
         with status_placeholder.container():
-            st.subheader("🔎 Töötlemise sammud")
+            st.subheader("\U0001F50D Töötlemise sammud")
             for msg in st.session_state.status_messages:
                 st.info(msg)
 
 
 def render_response():
     if not st.session_state.last_response:
+        response_placeholder.empty()
         return
 
-    with response_section:
+    with response_placeholder.container():
         st.divider()
         if st.session_state.last_status == "OK":
-            st.subheader("💡 Tehisintellekti vastus:")
+            st.subheader("\U0001F4AC Tehisintellekti vastus:")
             st.markdown(st.session_state.last_response)
             if st.session_state.last_post_analysis:
-                with st.expander("🛡️ Kvaliteedikontrolli selgitus", expanded=False):
+                with st.expander("\U0001F6E1 Kvaliteedikontrolli selgitus", expanded=False):
                     st.info(st.session_state.last_post_analysis)
         else:
             st.warning(st.session_state.last_response)
             if st.session_state.last_post_analysis:
-                with st.expander("🛡️ Miks vastus blokeeriti?", expanded=True):
+                with st.expander("\U0001F6E1 Miks vastus blokeeriti?", expanded=True):
                     st.error(st.session_state.last_post_analysis)
 
 
 # --- UI SEADISTAMINE ---
-st.set_page_config(page_title="Sinu nutikas AI assistent", layout="wide", page_icon="🚖")
+st.set_page_config(page_title="Sinu nutikas AI assistent", layout="wide")
 
-# Session state algväärtustamine
+# Session state algvĆ¤Ć¤rtustamine
 if "processing" not in st.session_state:
     st.session_state.processing = False
 if "last_response" not in st.session_state:
@@ -340,7 +397,7 @@ if "last_elapsed_sec" not in st.session_state:
 
 # --- SIDEBAR ---
 with st.sidebar:
-    st.title(f"🛡 {get_sidebar_title()}")
+    st.title(f"\U0001F6E1 {get_sidebar_title()}")
     st.caption("*100% vibecoded*")
     is_disabled = st.session_state.processing
     build_time = detect_build_time()
@@ -356,6 +413,47 @@ with st.sidebar:
     st.divider()
     st.subheader("Mudelid")
     pre_check_model_input = st.text_input("Pre-check mudel:", DEFAULT_GUARD, disabled=is_disabled)
+    normalization_mode_label = st.selectbox(
+        "Normaliseerimine:",
+        options=[
+            "Normaliseeri pre-check mudeliga",
+            "Normaliseeri eraldi mudeliga",
+            "Ära normaliseeri",
+        ],
+        index=0,
+        disabled=is_disabled,
+    )
+    mode_map = {
+        "Normaliseeri pre-check mudeliga": "precheck",
+        "Normaliseeri eraldi mudeliga": "external",
+        "Ära normaliseeri": "off",
+    }
+    normalization_mode = mode_map.get(normalization_mode_label, "precheck")
+    normalizer_model_input = DEFAULT_NORMALIZER
+    if normalization_mode == "external":
+        _, normalize_cfg_col = st.columns([1, 12])
+        with normalize_cfg_col:
+            normalizer_choice = st.selectbox(
+                "Normaliseerimise mudel:",
+                options=[
+                    "alarjoeste/estonian-normalizer",
+                    "gemma2:2b",
+                    "llama3:8b",
+                    "Custom...",
+                ],
+                index=0,
+                disabled=is_disabled,
+                key="normalizer_model_choice",
+            )
+            if normalizer_choice == "Custom...":
+                normalizer_model_input = st.text_input(
+                    "Custom normaliseerimise mudel:",
+                    DEFAULT_NORMALIZER,
+                    disabled=is_disabled,
+                    key="normalizer_model_custom",
+                )
+            else:
+                normalizer_model_input = normalizer_choice
     main_model_input = st.text_input("Põhimudel (RAG):", DEFAULT_MAIN, disabled=is_disabled)
     post_check_model_input = st.text_input("Post-check mudel:", DEFAULT_GUARD, disabled=is_disabled)
 
@@ -372,18 +470,18 @@ with st.sidebar:
     )
 
     st.divider()
-    if st.button("📋 Näita/Peida logid", disabled=is_disabled):
+    if st.button("\U0001F4CB Näita/Peida logid", disabled=is_disabled):
         st.session_state.show_logs = not st.session_state.show_logs
         st.rerun()
 
-    if st.button("📝 Muuda prompte", disabled=is_disabled):
+    if st.button("\U0001F4AF Muuda prompte", disabled=is_disabled):
         st.session_state.edit_prompts = not st.session_state.edit_prompts
         st.rerun()
 
     timer_placeholder = st.empty()
 
 # --- PEALEHT ---
-st.title("🚀 Sinu nutikas AI assistent")
+st.title("\U0001F680 Sinu nutikas AI assistent")
 st.caption("Süsteem kasutab bge-m3 embeddinguid ja struktuurset riigihangete andmebaasi.")
 
 # --- PÄRINGU VORM ---
@@ -403,6 +501,8 @@ logs_section = st.container()
 
 with status_section:
     status_placeholder = st.empty()
+with response_section:
+    response_placeholder = st.empty()
 
 if submit_button and user_input:
     st.session_state.processing = True
@@ -418,6 +518,9 @@ if submit_button and user_input:
 if st.session_state.processing and st.session_state.current_query:
     u_input = st.session_state.current_query
     start_time_total = time.time()
+    # Tühjendame eelmise päringu nähtava väljundi kohe uue töötluse alguses.
+    status_placeholder.empty()
+    response_placeholder.empty()
 
     log_data = {
         "timestamp": logic_core.get_ee_time().strftime("%Y-%m-%d %H:%M:%S"),
@@ -444,40 +547,73 @@ if st.session_state.processing and st.session_state.current_query:
     try:
         if any(x in security_option for x in ["Eelkontroll", "Täiskontroll"]):
             step_start = time.time()
-            update_ui("🔨 Samm 1/4: Päringu valideerimine...")
-            pre_p_template = logic_core.PROMPTS.get("PRE_CHECK_PROMPT", "")
-            pre_p = pre_p_template.replace("{u_input}", u_input)
-            pre_res = logic_core.ask_ollama(pre_check_model_input, pre_p, selected_threads, selected_timeout)
-            status, normalized = logic_core.parse_pre_check(pre_res)
+            update_ui("\U0001F528 Samm 1/4: Päringu valideerimine...")
+            pre_data, pre_error = fetch_precheck_via_api(
+                u_input,
+                pre_check_model_input,
+                normalization_mode,
+                selected_threads,
+                selected_timeout,
+            )
+            if pre_error:
+                raise RuntimeError(f"Pre-check API viga: {pre_error}")
+
+            status = str(pre_data.get("status", "BLOCKED")).upper()
+            normalized = pre_data.get("normalized", "") or u_input
+            reason = pre_data.get("reason", "")
             pre_duration = round(time.time() - step_start, 2)
-            update_ui(f"✅ Samm 1/4 valmis ({pre_duration} sek)")
+            update_ui(f"\u2705 Samm 1/4 valmis ({pre_duration} sek)")
 
             log_data["steps"]["pre_check"] = {
                 "model": pre_check_model_input,
-                "prompt": pre_p,
-                "start_time": logic_core.get_ee_time().strftime("%H:%M:%S"),
+                "normalization_mode": normalization_mode,
                 "status": status,
-                "normalized": normalized if normalized else u_input,
-                "duration": round(pre_duration * 1000, 2),
-                "raw_response": pre_res,
+                "normalized": normalized,
+                "reason": reason,
+                "duration": round(pre_duration, 2),
+                "api_response": pre_data or {},
             }
 
-            if status == "ALLOWED" and normalized:
-                active_query = normalized
-            elif status != "ALLOWED":
+            if status != "ALLOWED":
                 is_safe = False
-                main_answer = f"🚫 **Päring blokeeritud turvafiltri poolt.**\n\nSelgitus: {pre_res}"
+                explain = reason or "Turvakontroll blokeeris päringu."
+                main_answer = f"**Päring blokeeritud turvafiltri poolt.**\n\nSelgitus: {explain}"
                 log_data["final_status"] = "BLOCKED"
+            else:
+                if normalization_mode == "precheck":
+                    active_query = normalized
+                elif normalization_mode == "external":
+                    norm_start = time.time()
+                    update_ui(f"\U0001F9E9 Samm 1b: Normaliseerin päringu eraldi mudeliga ({normalizer_model_input})...")
+                    norm_data, norm_error = fetch_normalized_query_via_api(
+                        u_input,
+                        normalizer_model_input,
+                        selected_threads,
+                        selected_timeout,
+                    )
+                    if norm_error:
+                        raise RuntimeError(f"Normalize API viga: {norm_error}")
+                    active_query = norm_data.get("normalized", "") or u_input
+                    norm_duration = round(time.time() - norm_start, 2)
+                    update_ui(f"\u2705 Samm 1b valmis ({norm_duration} sek)")
+                    log_data["steps"]["normalize"] = {
+                        "model": normalizer_model_input,
+                        "normalized": active_query,
+                        "duration": round(norm_duration, 2),
+                        "api_response": norm_data or {},
+                    }
+                else:
+                    active_query = u_input
 
         if is_safe:
-            update_ui(f"📚 Samm 2/4: Otsin konteksti | päring: {active_query}")
+            update_ui(f"\U0001F4DA Samm 2/4: Otsin konteksti | päring: {active_query}")
             ctx_start = time.time()
             fetched_context, retrieval_data, retrieval_error = fetch_retrieval_context_via_api(active_query)
             if retrieval_error:
                 raise RuntimeError(f"Retrieval API viga: {retrieval_error}")
             context_found = len(fetched_context.strip()) > 0
             ctx_duration = round(time.time() - ctx_start, 2)
-            update_ui(f"✅ Samm 2/4 valmis ({ctx_duration} sek) | päring: {active_query}")
+            update_ui(f"\u2705 Samm 2/4 valmis ({ctx_duration} sek) | päring: {active_query}")
 
             log_data["steps"]["context_fetch"] = {
                 "found": context_found,
@@ -490,14 +626,14 @@ if st.session_state.processing and st.session_state.current_query:
                 main_answer = "Esitatud kontekstis info puudub."
                 log_data["final_status"] = "NO_CONTEXT"
             else:
-                update_ui(f"🧠 Samm 3/4: Genereerin vastust ({main_model_input}) | päring: {active_query}")
+                update_ui(f"\U0001F9E0 Samm 3/4: Genereerin vastust ({main_model_input}) | päring: {active_query}")
                 rag_p_template = logic_core.PROMPTS.get("RAG_PROMPT", "")
                 rag_p = rag_p_template.replace("{context}", fetched_context).replace("{query}", active_query)
 
                 step_start_main = time.time()
                 main_answer = logic_core.ask_ollama(main_model_input, rag_p, selected_threads, selected_timeout)
                 main_duration = round(time.time() - step_start_main, 2)
-                update_ui(f"✅ Samm 3/4 valmis ({main_duration} sek) | päring: {active_query}")
+                update_ui(f"\u2705 Samm 3/4 valmis ({main_duration} sek) | päring: {active_query}")
 
                 log_data["steps"]["main_query"] = {
                     "model": main_model_input,
@@ -509,7 +645,7 @@ if st.session_state.processing and st.session_state.current_query:
                 }
 
                 if any(x in security_option for x in ["järelkontroll", "Täiskontroll"]):
-                    update_ui("🛡️ Samm 4/4: Teen vastuse kvaliteedikontrolli...")
+                    update_ui("\U0001F6E1 Samm 4/4: Teen vastuse kvaliteedikontrolli...")
                     post_p_template = logic_core.PROMPTS.get("POST_CHECK_PROMPT", "")
                     post_p = (
                         post_p_template
@@ -524,7 +660,7 @@ if st.session_state.processing and st.session_state.current_query:
                     p_status = post_data.get("status", "ALLOWED")
                     post_analysis = post_data.get("analysis", post_res)
                     post_duration = round(time.time() - step_start_post, 2)
-                    update_ui(f"✅ Samm 4/4 valmis ({post_duration} sek)")
+                    update_ui(f"\u2705 Samm 4/4 valmis ({post_duration} sek)")
 
                     log_data["steps"]["post_check"] = {
                         "model": post_check_model_input,
@@ -538,7 +674,7 @@ if st.session_state.processing and st.session_state.current_query:
 
                     if p_status == "BLOCKED":
                         is_safe = False
-                        main_answer = "🚫 **Vastus blokeeriti järelkontrolli poolt.**"
+                        main_answer = "**Vastus blokeeriti järelkontrolli poolt.**"
                         log_data["final_status"] = "BLOCKED"
 
         st.session_state.last_response = main_answer
@@ -572,3 +708,4 @@ render_status_messages()
 render_response()
 render_prompt_editor()
 render_logs()
+
