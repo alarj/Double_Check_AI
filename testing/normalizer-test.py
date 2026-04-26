@@ -21,16 +21,22 @@ MODELS_TO_TEST = [
     "llama3:8b",
 ]
 
+if os.getenv("GEMINI_API_KEY", "").strip():
+    MODELS_TO_TEST.append("gemini:gemini-2.5-flash")
+
 # Mudelipõhised timeoutid: estonian-normalizer on aeglasem, seega anname rohkem aega.
 MODEL_TIMEOUTS = {
     "alarjoeste/estonian-normalizer": 900,
     "gemma2:2b": 360,
     "phi3": 360,
     "llama3:8b": 360,
+    "gemini:gemini-2.5-flash": 180,
 }
 
 DATASET_FILE = "/testing/normalizer_dataset.json"
 LOG_FILE = "/testing/normalizer-test-log.json"
+GEMINI_RPM_LIMIT = 5
+GEMINI_WINDOW_SEC = 60
 
 
 def ee_now_str() -> str:
@@ -157,8 +163,10 @@ def validate_normalized(normalized_text: str, meta: dict):
     is_valid = not missing_all and not missing_any_groups and not forbidden_found
     fail_reason = ""
     if not is_valid:
-        if missing_all or missing_any_groups:
-            fail_reason = "missing_keywords"
+        if missing_all:
+            fail_reason = "missing_required_keywords"
+        elif missing_any_groups:
+            fail_reason = "missing_any_group_match"
         elif forbidden_found:
             fail_reason = "forbidden_keywords_present"
 
@@ -182,7 +190,7 @@ def run_benchmark():
         passed = 0
         latencies = []
 
-        for case in dataset:
+        for idx, case in enumerate(dataset, start=1):
             case_id = case.get("id", "UNKNOWN")
             user_input = case.get("question", "")
             meta = case.get("normalizer_metadata", {})
@@ -221,7 +229,15 @@ def run_benchmark():
                         passed += 1
                         print(f"  OK {desc:.<50} [{latency:.2f}s]")
                     else:
-                        print(f"  FAIL {desc:.<48} ({fail_reason})")
+                        details = []
+                        if missing_keywords:
+                            details.append(f"missing={missing_keywords}")
+                        if missing_any_groups:
+                            details.append(f"missing_any={missing_any_groups}")
+                        if forbidden_found:
+                            details.append(f"forbidden={forbidden_found}")
+                        detail_text = " | ".join(details) if details else "detail puudub"
+                        print(f"  FAIL {desc:.<48} ({fail_reason}) -> {detail_text}")
 
                     full_log.append(
                         {
@@ -237,6 +253,7 @@ def run_benchmark():
                             "missing_keywords": missing_keywords,
                             "missing_any_groups": missing_any_groups,
                             "forbidden_found": forbidden_found,
+                            "fail_detail": detail_text if not is_valid else "",
                             "fail_reason": fail_reason if not is_valid else "",
                             "success": is_valid,
                         }
@@ -271,6 +288,19 @@ def run_benchmark():
                         "success": False,
                     }
                 )
+
+            # Gemini free-tier RPM kaitse:
+            # teeme iga 5 päringu järel 60s pausi, et vältida rate-limit vigu.
+            if (
+                model.lower().startswith("gemini:")
+                and idx % GEMINI_RPM_LIMIT == 0
+                and idx < len(dataset)
+            ):
+                print(
+                    f"  [RATE LIMIT] {model}: tehtud {idx} päringut, "
+                    f"ootan {GEMINI_WINDOW_SEC}s (RPM={GEMINI_RPM_LIMIT})..."
+                )
+                time.sleep(GEMINI_WINDOW_SEC)
 
         total = len(dataset)
         avg_lat = sum(latencies) / len(latencies) if latencies else 0.0

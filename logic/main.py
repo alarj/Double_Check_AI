@@ -3,6 +3,7 @@ import json
 import os
 import subprocess
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -121,16 +122,19 @@ def fetch_precheck_via_api(user_input, model, normalization_mode, threads, timeo
         return None, str(e)
 
 
-def fetch_normalized_query_via_api(user_input, model, threads, timeout):
+def fetch_normalized_query_via_api(user_input, model, threads, timeout, gemini_api_key=""):
     """Toob normaliseeritud pÄ†Ā¤ringu REST API /normalize endpointist."""
     try:
         auth_token = base64.b64encode(f"{API_USER}:{API_PASSWORD}".encode("utf-8")).decode("utf-8")
-        payload = json.dumps({
+        req_data = {
             "user_input": user_input,
             "model": model,
             "threads": int(threads),
             "timeout": int(timeout),
-        }).encode("utf-8")
+        }
+        if gemini_api_key:
+            req_data["gemini_api_key"] = gemini_api_key
+        payload = json.dumps(req_data).encode("utf-8")
         req = urllib.request.Request(
             f"{API_BASE_URL}/normalize",
             data=payload,
@@ -143,6 +147,16 @@ def fetch_normalized_query_via_api(user_input, model, threads, timeout):
         with urllib.request.urlopen(req, timeout=int(timeout) + 30) as res:
             data = json.loads(res.read().decode("utf-8"))
             return data, None
+    except urllib.error.HTTPError as e:
+        try:
+            body = e.read().decode("utf-8")
+            parsed = json.loads(body) if body else {}
+            detail = parsed.get("detail") if isinstance(parsed, dict) else None
+            if detail:
+                return None, f"HTTP {e.code}: {detail}"
+        except Exception:
+            pass
+        return None, f"HTTP {e.code}: {e.reason}"
     except Exception as e:
         return None, str(e)
 
@@ -430,6 +444,7 @@ with st.sidebar:
     }
     normalization_mode = mode_map.get(normalization_mode_label, "precheck")
     normalizer_model_input = DEFAULT_NORMALIZER
+    gemini_api_key_input = ""
     if normalization_mode == "external":
         _, normalize_cfg_col = st.columns([1, 12])
         with normalize_cfg_col:
@@ -437,6 +452,7 @@ with st.sidebar:
                 "Normaliseerimise mudel:",
                 options=[
                     "alarjoeste/estonian-normalizer",
+                    "gemini:gemini-2.5-flash",
                     "gemma2:2b",
                     "llama3:8b",
                     "Custom...",
@@ -454,6 +470,14 @@ with st.sidebar:
                 )
             else:
                 normalizer_model_input = normalizer_choice
+            if normalizer_model_input.lower().startswith("gemini:"):
+                gemini_api_key_input = st.text_input(
+                    "Gemini API key:",
+                    value="",
+                    type="password",
+                    disabled=is_disabled,
+                    key="gemini_api_key_input",
+                )
     main_model_input = st.text_input("Põhimudel (RAG):", DEFAULT_MAIN, disabled=is_disabled)
     post_check_model_input = st.text_input("Post-check mudel:", DEFAULT_GUARD, disabled=is_disabled)
 
@@ -590,6 +614,7 @@ if st.session_state.processing and st.session_state.current_query:
                         normalizer_model_input,
                         selected_threads,
                         selected_timeout,
+                        gemini_api_key=gemini_api_key_input,
                     )
                     if norm_error:
                         raise RuntimeError(f"Normalize API viga: {norm_error}")
@@ -688,13 +713,17 @@ if st.session_state.processing and st.session_state.current_query:
         st.session_state.last_response = f"Kriitiline viga: {e}"
         st.session_state.last_post_analysis = None
         st.session_state.last_status = "ERROR"
+        is_safe = False
+        log_data["final_status"] = "ERROR"
         log_data["error"] = str(e)
 
     finally:
         log_data["total_duration"] = round(time.time() - start_time_total, 2)
         st.session_state.last_elapsed_sec = log_data["total_duration"]
         timer_placeholder.metric("Kestus", f"{round(st.session_state.last_elapsed_sec, 1)} sek")
-        if is_safe and log_data["final_status"] == "PENDING":
+        if "error" in log_data and log_data.get("final_status") == "PENDING":
+            log_data["final_status"] = "ERROR"
+        elif is_safe and log_data["final_status"] == "PENDING":
             log_data["final_status"] = "OK"
 
         log_json_event(log_data)

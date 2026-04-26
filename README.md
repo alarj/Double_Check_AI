@@ -159,6 +159,31 @@ NB!! `docker-compose.yml` tõmbab selle mudeli ka automaatselt `ollama` käivitu
 * Algallikas: EuroLLM-9B-Instruct.Q4_K_M.gguf
 * Litsents: **Apache License 2.0**
 
+## Gemini normaliseerija (väline API)
+`/normalize` endpoint oskab lisaks Ollama mudelitele kasutada ka Google Gemini API teenust.
+
+Kasutamine:
+1. Sea API võti keskkonnamuutujasse:
+```bash
+export GEMINI_API_KEY="<sinu_gemini_api_voti>"
+```
+2. UI-s vali normaliseerimismudeliks näiteks:
+* `gemini:gemini-2.0-flash`
+
+Vorming:
+* Kui mudelinimi algab `gemini:`, kasutab API Google Gemini teenust.
+* Muul juhul kasutab API Ollama mudelit.
+
+Näidis `/normalize` request:
+```json
+{
+  "user_input": "kui suur on lihthanke piirmäär",
+  "model": "gemini:gemini-2.0-flash",
+  "timeout": 90,
+  "threads": 4
+}
+```
+
 ## Automaattestid
 Süsteemis on olemas järgmised testid, mis asuvad /testing/ kataloogis:
 
@@ -166,6 +191,7 @@ Süsteemis on olemas järgmised testid, mis asuvad /testing/ kataloogis:
 * **bench-post-check.py** -- post-check test, testilood failis post_check_dataset.json
 * **retr-test.py** -- retrieval (vektorbaasi päring) test, testilood failis retrieval_dataset.json
 * **llm-test.py** -- põhipäringu test, testilood failis main_llm_dataset.json
+* **normalizer-test.py** -- normaliseerimise test, testilood failis normalizer_dataset.json
 * **benchmark_embeddings.py** -- testib erinevaid embeddingu mudeleid, st **NB!** koostab erinevate mudelitega vektorandmebaasid ja võrdleb neid omavahel. Veidi ajas maha jäänud. 
 
 Kõik testid koostavad ka logi nii ekraanile kui .json formaadis sinnasamasse /testing/ kataloogi. Logid on nähtavad ka UI kaudu ja API teenuses /logs Mõlemast saab neid alla laadida ja oma arvutis säilitada või edasi uurida.

@@ -11,6 +11,8 @@ from chromadb.utils import embedding_functions
 # Võtame URL-id keskkonnamuutujatest (kooskõlas docker-compose'iga)
 OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
 OLLAMA_API_URL = f"{OLLAMA_URL}/api/generate"
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
+GEMINI_BASE_URL = os.getenv("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta")
 # Täpne path vastavalt docker-compose volume'ile
 CHROMA_DB_PATH = "/app/storage/vector_db"
 PROMPTS_FILE = "/app/prompts.json"
@@ -217,6 +219,73 @@ def ask_ollama(
         return f"VIGA: Aegumine ({timeout}s)."
     except Exception as e:
         return f"VIGA: Sidekatkestus - {str(e)}"
+
+
+def ask_gemini(model, prompt, timeout, max_output_tokens=128, api_key=None, response_schema=None):
+    """
+    Saadab päringu Google Gemini API-le.
+    Eeldab, et GEMINI_API_KEY on keskkonnamuutujas.
+    """
+    effective_key = (api_key or GEMINI_API_KEY or "").strip()
+    if not effective_key:
+        return "VIGA: GEMINI_API_KEY puudub."
+
+    model_name = str(model or "").strip() or "gemini-2.5-flash"
+    url = f"{GEMINI_BASE_URL}/models/{model_name}:generateContent?key={effective_key}"
+
+    payload = {
+        "contents": [
+            {
+                "parts": [
+                    {"text": prompt}
+                ]
+            }
+        ],
+        "generationConfig": {
+            "temperature": 0,
+            "maxOutputTokens": int(max_output_tokens),
+            "responseMimeType": "application/json",
+            "thinkingConfig": {
+                "thinkingBudget": 0
+            },
+        },
+    }
+    if response_schema:
+        payload["generationConfig"]["responseSchema"] = response_schema
+
+    try:
+        response = requests.post(url, json=payload, timeout=timeout)
+        if response.status_code != 200:
+            err_msg = ""
+            try:
+                err_json = response.json()
+                err_obj = err_json.get("error", {}) if isinstance(err_json, dict) else {}
+                err_msg = str(err_obj.get("message", "")).strip()
+            except Exception:
+                err_msg = ""
+            if err_msg:
+                return f"VIGA: Gemini vastas koodiga {response.status_code} - {err_msg}"
+            return f"VIGA: Gemini vastas koodiga {response.status_code}"
+
+        data = response.json()
+        candidates = data.get("candidates", [])
+        if not candidates:
+            return "VIGA: Gemini ei tagastanud kandidaate."
+
+        parts = (
+            candidates[0]
+            .get("content", {})
+            .get("parts", [])
+        )
+        if not parts:
+            return "VIGA: Gemini vastus oli tühi."
+
+        text = parts[0].get("text", "")
+        return text or "VIGA: Gemini vastus oli tühi."
+    except requests.exceptions.Timeout:
+        return f"VIGA: Gemini aegumine ({timeout}s)."
+    except Exception as e:
+        return f"VIGA: Gemini sidekatkestus - {str(e)}"
 
 def parse_json_res(raw_res):
     """

@@ -4,6 +4,7 @@ import logic_core
 import json
 import os
 import time
+import re
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from pydantic import BaseModel, Field
@@ -58,6 +59,7 @@ class PreCheckRequest(BaseModel):
 class NormalizeRequest(BaseModel):
     user_input: str
     model: str = "alarjoeste/estonian-normalizer"
+    gemini_api_key: Optional[str] = None
     timeout: Optional[int] = 90
     threads: Optional[int] = 4
 
@@ -196,43 +198,79 @@ async def normalize_query(req: NormalizeRequest, user: str = Depends(authenticat
     start_time = time.time()
     start_time_str = time.strftime("%H:%M:%S")
     try:
-        sys_prompt = logic_core.PROMPTS.get("NORMALIZE_QUERY_PROMPT")
+        model_name = str(req.model or "").strip()
+        is_gemini = model_name.lower().startswith("gemini:")
+        prompt_key = "NORMALIZE_QUERY_PROMPT_GEMINI" if is_gemini else "NORMALIZE_QUERY_PROMPT"
+        sys_prompt = logic_core.PROMPTS.get(prompt_key)
         if not sys_prompt:
-            raise RuntimeError("Prompt puudub: NORMALIZE_QUERY_PROMPT")
+            raise RuntimeError(f"Prompt puudub: {prompt_key}")
         full_prompt = sys_prompt.replace("{u_input}", req.user_input)
 
-        result = logic_core.ask_ollama(
-            req.model,
-            full_prompt,
-            req.threads,
-            req.timeout,
-            num_predict=96,
-            response_format="json",
-            stop=["\n\n###", "\n###", "\nUSER INPUT:", "\nJSON OUTPUT:"],
-        )
+        if is_gemini:
+            gemini_model = model_name.split(":", 1)[1].strip() or "gemini-2.5-flash"
+            result = logic_core.ask_gemini(
+                gemini_model,
+                full_prompt,
+                req.timeout,
+                max_output_tokens=128,
+                api_key=req.gemini_api_key,
+                response_schema={
+                    "type": "OBJECT",
+                    "properties": {
+                        "normalized_query": {"type": "STRING"}
+                    },
+                    "required": ["normalized_query"]
+                },
+            )
+        else:
+            result = logic_core.ask_ollama(
+                req.model,
+                full_prompt,
+                req.threads,
+                req.timeout,
+                num_predict=96,
+                response_format="json",
+                stop=["\n\n###", "\n###", "\nUSER INPUT:", "\nJSON OUTPUT:"],
+            )
         duration = time.time() - start_time
         if isinstance(result, str) and result.startswith("VIGA:"):
+            error_text = str(result)
+            status_code = 502
+            error_lower = error_text.lower()
+            if "aegumine" in error_lower:
+                status_code = 504
+            elif "puudub" in error_lower:
+                status_code = 400
+            else:
+                code_match = re.search(r"koodiga\s+(\d{3})", error_text)
+                if code_match:
+                    status_code = int(code_match.group(1))
             log_api_call(
                 "/normalize",
-                504,
+                status_code,
                 duration,
                 user,
                 {
                     "model": req.model,
-                    "prompt_key": "NORMALIZE_QUERY_PROMPT",
+                    "prompt_key": prompt_key,
                     "prompt": full_prompt,
                     "start_time": start_time_str,
-                    "error": result,
+                    "error": error_text,
                 },
             )
-            raise HTTPException(status_code=504, detail=result)
+            raise HTTPException(status_code=status_code, detail=error_text)
 
         parsed_result = logic_core.parse_json_res(result)
-        normalized_value = parsed_result.get("normalized_query", "").strip() or req.user_input
+        normalized_value = str(parsed_result.get("normalized_query", "")).strip()
+        if not normalized_value:
+            raise HTTPException(
+                status_code=502,
+                detail="Normalize mudel ei tagastanud välja 'normalized_query' korrektses JSON-vormis."
+            )
 
         response_data = {
             "model": req.model,
-            "prompt_key": "NORMALIZE_QUERY_PROMPT",
+            "prompt_key": prompt_key,
             "prompt": full_prompt,
             "start_time": start_time_str,
             "normalized": normalized_value,

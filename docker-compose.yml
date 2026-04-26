@@ -20,6 +20,7 @@ services:
       - OLLAMA_BASE_URL=http://ollama:11434
       - BUILD_TIME=${BUILD_TIME:-teadmata}
       - BUILD_BRANCH=${BUILD_BRANCH:-teadmata}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - WORKSPACE_DIR=/workspace
     # Käivitame Streamlit rakenduse
     command: >
@@ -49,6 +50,7 @@ services:
       - OLLAMA_BASE_URL=http://ollama:11434
       - BUILD_TIME=${BUILD_TIME:-teadmata}
       - BUILD_BRANCH=${BUILD_BRANCH:-teadmata}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - WORKSPACE_DIR=/workspace
     command: uvicorn api:app --host 0.0.0.0 --port 8000
     volumes:
@@ -71,6 +73,7 @@ services:
       - OLLAMA_BASE_URL=http://ollama:11434
       - BUILD_TIME=${BUILD_TIME:-teadmata}
       - BUILD_BRANCH=${BUILD_BRANCH:-teadmata}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
     # See konteiner ootab käsku (manual trigger) või käivitab konkreetse testi
     command: tail -f /dev/null
     depends_on:
