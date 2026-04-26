@@ -205,7 +205,10 @@ async def normalize_query(req: NormalizeRequest, user: str = Depends(authenticat
             req.model,
             full_prompt,
             req.threads,
-            req.timeout
+            req.timeout,
+            num_predict=96,
+            response_format="json",
+            stop=["\n\n###", "\n###", "\nUSER INPUT:", "\nJSON OUTPUT:"],
         )
         duration = time.time() - start_time
         if isinstance(result, str) and result.startswith("VIGA:"):

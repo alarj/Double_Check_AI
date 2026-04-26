@@ -1,6 +1,8 @@
 import json
 import os
+import re
 import time
+import unicodedata
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -35,6 +37,83 @@ def ee_now_str() -> str:
     return datetime.now(ZoneInfo("Europe/Tallinn")).strftime("%Y-%m-%d %H:%M:%S")
 
 
+def normalize_text(text: str) -> str:
+    """Normaliseerib teksti võrdluseks (diakriitika, eraldajad, tühikud)."""
+    lowered = (text or "").lower().replace("_", " ").replace("-", " ")
+    lowered = "".join(
+        ch for ch in unicodedata.normalize("NFKD", lowered)
+        if not unicodedata.combining(ch)
+    )
+    lowered = re.sub(r"\s+", " ", lowered).strip()
+    return lowered
+
+
+def build_candidates(normalized_text: str):
+    """
+    Koostab kontrollikandidaadid:
+    - kogu tekst (substring kontrolliks),
+    - tokenid,
+    - 2-tokeni liited (nt 'lihtsa hanke' -> 'lihtsahanke').
+    """
+    tokens = re.findall(r"\w+", normalized_text)
+    candidates = set(tokens)
+    for i in range(len(tokens) - 1):
+        candidates.add(tokens[i] + tokens[i + 1])
+    return normalized_text, candidates
+
+
+def trigram_similarity(a: str, b: str) -> float:
+    """Lihtne trigrammi sarnasus morfoloogiliste variantide püüdmiseks."""
+    if not a or not b:
+        return 0.0
+    if a == b:
+        return 1.0
+
+    def grams(s: str):
+        s = f"  {s}  "
+        return {s[i:i+3] for i in range(len(s) - 2)}
+
+    ga = grams(a)
+    gb = grams(b)
+    if not ga or not gb:
+        return 0.0
+    inter = len(ga & gb)
+    union = len(ga | gb)
+    return inter / union if union else 0.0
+
+
+def keyword_match(keyword: str, normalized_text: str, candidates: set) -> bool:
+    """
+    Kontrollib märksõna leidumist robustselt:
+    1) otsene substring,
+    2) täpne token/2-tokeni liide,
+    3) trigrammi sarnasus (kõrge lävend), et taluda käändeid/ühendi varieerumist.
+    """
+    kw = normalize_text(keyword)
+    if not kw:
+        return True
+
+    compact_kw = kw.replace(" ", "")
+    compact_text = normalized_text.replace(" ", "")
+
+    if kw in normalized_text or compact_kw in compact_text:
+        return True
+    if kw in candidates or compact_kw in candidates:
+        return True
+
+    # Morfoloogilise variatsiooni jaoks range fuzzy-match.
+    # Lävend on piisavalt kõrge, et vältida juhuslikke vasteid.
+    for cand in candidates:
+        if len(cand) < 5 or len(compact_kw) < 5:
+            continue
+        # Kui algus on täiesti erinev, jätame vahele (vähendab valepositiive).
+        if cand[:2] != compact_kw[:2]:
+            continue
+        if trigram_similarity(cand, compact_kw) >= 0.78:
+            return True
+    return False
+
+
 def load_existing_log():
     if not os.path.exists(LOG_FILE):
         return []
@@ -60,18 +139,19 @@ def load_dataset():
 
 
 def validate_normalized(normalized_text: str, meta: dict):
-    text = (normalized_text or "").lower().strip()
-    must_contain = [str(x).lower() for x in meta.get("must_contain", []) if str(x).strip()]
-    must_not_contain = [str(x).lower() for x in meta.get("must_not_contain", []) if str(x).strip()]
+    text = normalize_text(normalized_text)
+    text_for_substring, candidates = build_candidates(text)
+    must_contain = [normalize_text(str(x)) for x in meta.get("must_contain", []) if str(x).strip()]
+    must_not_contain = [normalize_text(str(x)) for x in meta.get("must_not_contain", []) if str(x).strip()]
     must_contain_any = meta.get("must_contain_any", [])
 
-    missing_all = [kw for kw in must_contain if kw not in text]
-    forbidden_found = [kw for kw in must_not_contain if kw in text]
+    missing_all = [kw for kw in must_contain if not keyword_match(kw, text_for_substring, candidates)]
+    forbidden_found = [kw for kw in must_not_contain if keyword_match(kw, text_for_substring, candidates)]
     missing_any_groups = []
 
     for group in must_contain_any:
-        options = [str(x).lower() for x in group if str(x).strip()]
-        if options and not any(opt in text for opt in options):
+        options = [normalize_text(str(x)) for x in group if str(x).strip()]
+        if options and not any(keyword_match(opt, text_for_substring, candidates) for opt in options):
             missing_any_groups.append(group)
 
     is_valid = not missing_all and not missing_any_groups and not forbidden_found

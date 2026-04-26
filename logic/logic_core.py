@@ -183,7 +183,15 @@ def get_context(query, n_results=5, max_context_blocks=3):
         print(f"VIGA konteksti loomisel: {e}")
         return ""
 
-def ask_ollama(model, prompt, threads, timeout):
+def ask_ollama(
+    model,
+    prompt,
+    threads,
+    timeout,
+    num_predict=1024,
+    response_format=None,
+    stop=None,
+):
     """Saadab päringu Ollama API-le genereerimiseks."""
     payload = {
         "model": model,
@@ -191,10 +199,14 @@ def ask_ollama(model, prompt, threads, timeout):
         "stream": False,
         "options": {
             "num_thread": int(threads),
-            "num_predict": 1024,
+            "num_predict": int(num_predict),
             "temperature": 0  # Deterministlik vastus on juriidikas kriitiline
         }
     }
+    if response_format:
+        payload["format"] = response_format
+    if stop:
+        payload["options"]["stop"] = stop
     
     try:
         response = requests.post(OLLAMA_API_URL, json=payload, timeout=timeout)
