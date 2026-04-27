@@ -1,4 +1,4 @@
-﻿from fastapi import FastAPI, Depends, HTTPException, status, Query
+from fastapi import FastAPI, Depends, HTTPException, status, Query
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 import logic_core
 import json
@@ -34,16 +34,16 @@ TEST_LOG_FILES = {
 
 
 def ee_now_str(fmt: str = "%Y-%m-%d %H:%M:%S") -> str:
-    """Tagastab kellaaja Eesti ajavĆ¶Ć¶ndis."""
+    """Tagastab kellaaja Eesti ajavööndis."""
     return datetime.now(ZoneInfo("Europe/Tallinn")).strftime(fmt)
 
 # --- AUTENTIMINE ---
 def authenticate(credentials: HTTPBasicCredentials = Depends(security)):
-    """PĆµhiline HTTP Basic autentimine."""
+    """Põhiline HTTP Basic autentimine."""
     if credentials.username != "admin" or credentials.password != "parool":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, 
-            detail="Vale kasutajanimi vĆµi parool",
+            detail="Vale kasutajanimi või parool",
             headers={"WWW-Authenticate": "Basic"},
         )
     return credentials.username
@@ -68,7 +68,7 @@ class MainQueryRequest(BaseModel):
     context: str
     model: str = "llama3:8b"
     timeout: Optional[int] = 120
-    threads: Optional[int] = 8
+    threads: Optional[int] = 4
 
 class RetrievalRequest(BaseModel):
     query: str = Field(..., min_length=1)
@@ -77,11 +77,11 @@ class RetrievalRequest(BaseModel):
 
 class PostCheckRequest(BaseModel):
     ai_response: str
-    # Pre-check "user_input" (algne, tĆ¶Ć¶tlemata kĆ¼simus)
+    # Pre-check "user_input" (algne, töötlemata küsimus)
     original_user_input: Optional[str] = Field(None, min_length=1)
-    # Pre-check vĆ¤ljund (normaliseeritud kĆ¼simus), mille alusel tehti pĆµhikĆ¼simus/RAG
+    # Pre-check väljund (normaliseeritud küsimus), mille alusel tehti põhiküsimus/RAG
     normalized_query: Optional[str] = ""
-    # Kontekst, mille alusel pĆµhipĆ¤ring LLM-s tehti (RAG kontekst)
+    # Kontekst, mille alusel põhipäring LLM-s tehti (RAG kontekst)
     context: Optional[str] = ""
     # Backward compatibility varasema kliendi jaoks
     original_query: Optional[str] = None
@@ -91,7 +91,7 @@ class PostCheckRequest(BaseModel):
 
 # --- LOGIMINE ---
 def log_api_call(endpoint: str, status_code: int, duration: float, user: str, extra_data: dict = None):
-    """Logib API pĆ¤ringu info faili."""
+    """Logib API päringu info faili."""
     log_entry = {
         "timestamp": ee_now_str(),
         "endpoint": endpoint,
@@ -115,13 +115,13 @@ def log_api_call(endpoint: str, status_code: int, duration: float, user: str, ex
 @app.post("/pre-check", tags=["Valideerimine"])
 async def pre_check(req: PreCheckRequest, user: str = Depends(authenticate)):
     """
-    Kontrollib sisendi turvalisust ja sobivust enne pĆµhipĆ¤ringut.
-    VĆµimaldab mĆ¤Ć¤rata mudelit, timeouti ja lĆµimede arvu.
+    Kontrollib sisendi turvalisust ja sobivust enne põhipäringut.
+    Võimaldab määrata mudelit, timeouti ja lõimede arvu.
     """
     start_time = time.time()
     start_time_str = time.strftime("%H:%M:%S")
     try:
-        # VĆµtame Ćµige vĆµtmega prompti failist
+        # Võtame õige võtmega prompti failist
         use_precheck_normalization = req.normalization_mode == "precheck"
         prompt_key = "PRE_CHECK_PROMPT" if use_precheck_normalization else "PRE_CHECK_SECURITY_ONLY_PROMPT"
         sys_prompt = logic_core.PROMPTS.get(prompt_key)
@@ -286,16 +286,16 @@ async def normalize_query(req: NormalizeRequest, user: str = Depends(authenticat
         log_api_call("/normalize", 500, 0, user, {"error": str(e)})
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/query", tags=["PĆµhipĆ¤ring"])
+@app.post("/query", tags=["Põhipäring"])
 async def run_query(req: MainQueryRequest, user: str = Depends(authenticate)):
     """
-    Saadab kasutaja pĆ¤ringu tehisintellektile.
+    Saadab kasutaja päringu tehisintellektile.
     Konfigureeritav: model, timeout, threads.
     """
     start_time = time.time()
     start_time_str = time.strftime("%H:%M:%S")
     try:
-        # VĆµtame prompti prompts.json failist ning tĆ¤idame sisendparameetritega
+        # Võtame prompti prompts.json failist ning täidame sisendparameetritega
         rag_prompt_template = logic_core.PROMPTS.get("RAG_PROMPT", "{context}\n{query}")
         full_prompt = (
             rag_prompt_template
@@ -331,7 +331,7 @@ async def run_query(req: MainQueryRequest, user: str = Depends(authenticate)):
 @app.post("/retrieval", tags=["Retrieval"])
 async def run_retrieval(req: RetrievalRequest, user: str = Depends(authenticate)):
     """
-    Toob vektorbaasist RAG konteksti antud pĆ¤ringu jaoks.
+    Toob vektorbaasist RAG konteksti antud päringu jaoks.
     """
     start_time = time.time()
     start_time_str = time.strftime("%H:%M:%S")
@@ -367,7 +367,7 @@ async def run_retrieval(req: RetrievalRequest, user: str = Depends(authenticate)
 @app.post("/post-check", tags=["Valideerimine"])
 async def post_check(req: PostCheckRequest, user: str = Depends(authenticate)):
     """
-    Kontrollib AI vastuse vastavust algsele kĆ¼simusele (hallutsinatsioonide vĆ¤ltimine).
+    Kontrollib AI vastuse vastavust algsele küsimusele (hallutsinatsioonide vältimine).
     """
     start_time = time.time()
     start_time_str = time.strftime("%H:%M:%S")
@@ -378,16 +378,16 @@ async def post_check(req: PostCheckRequest, user: str = Depends(authenticate)):
         if not req.original_user_input:
             raise HTTPException(status_code=422, detail="Missing required field: original_user_input (or legacy original_query)")
 
-        # VĆµtame Ćµige vĆµtmega prompti failist
+        # Võtame õige võtmega prompti failist
         sys_prompt = logic_core.PROMPTS.get("POST_CHECK_PROMPT", "{u_input}\n{main_res}")
-        # Asendame kohamĆ¤rgised vastavalt failile prompts.json
+        # Asendame kohamärgised vastavalt failile prompts.json
         full_prompt = (
             sys_prompt
             .replace("{u_input}", req.original_user_input)
             .replace("{context}", (req.context or "").strip() or "Puudub")
             .replace("{main_res}", req.ai_response)
         )
-        # Kui prompt kasutab lisa-kohamĆ¤rke, tĆ¤idame ka need (kui olemas)
+        # Kui prompt kasutab lisa-kohamärke, täidame ka need (kui olemas)
         full_prompt = full_prompt.replace("{normalized_query}", (req.normalized_query or "").strip() or req.original_user_input)
 
         result = logic_core.ask_ollama(
@@ -422,7 +422,7 @@ async def post_check(req: PostCheckRequest, user: str = Depends(authenticate)):
         log_api_call("/post-check", 500, 0, user, {"error": str(e)})
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/logs", tags=["SĆ¼steem"])
+@app.get("/logs", tags=["Süsteem"])
 def get_logs(
     user: str = Depends(authenticate), 
     source: str = Query(
@@ -441,9 +441,9 @@ def get_logs(
     ),
     limit: int = Query(50, description="Mitut viimast rida kuvada"),
     start: Optional[str] = Query(None, description="Algusaeg (YYYY-MM-DD HH:MM:SS)"),
-    end: Optional[str] = Query(None, description="LĆµpuaeg (YYYY-MM-DD HH:MM:SS)")
+    end: Optional[str] = Query(None, description="Lõpuaeg (YYYY-MM-DD HH:MM:SS)")
 ):
-    """Tagastab sĆ¼steemi logid filtreeritult."""
+    """Tagastab süsteemi logid filtreeritult."""
     if source == "api":
         path = API_LOG_FILE
     elif source == "ui":
@@ -459,13 +459,17 @@ def get_logs(
         with open(path, "r", encoding="utf-8") as f:
             raw_content = f.read().strip()
 
-        # Toetame nii JSONL (1 kirje rea kohta) kui ka JSON list formaati.
+        # Toetame nii JSONL (1 kirje rea kohta), JSON listi kui ka ühte JSON objekti.
         entries = []
         if raw_content:
             if raw_content.startswith("["):
                 parsed = json.loads(raw_content)
                 if isinstance(parsed, list):
                     entries = parsed
+            elif raw_content.startswith("{"):
+                parsed = json.loads(raw_content)
+                if isinstance(parsed, dict):
+                    entries = [parsed]
             else:
                 for line in raw_content.splitlines():
                     line = line.strip()
@@ -476,7 +480,12 @@ def get_logs(
         for entry in entries[-500:]:
             if not isinstance(entry, dict):
                 continue
-            ts = entry.get("timestamp", "")
+            ts = (
+                entry.get("timestamp")
+                or entry.get("run_started_at")
+                or entry.get("run_finished_at")
+                or ""
+            )
             if start and ts < start:
                 continue
             if end and ts > end:
@@ -491,7 +500,7 @@ def get_logs(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/health", tags=["SĆ¼steem"])
+@app.get("/health", tags=["Süsteem"])
 def health_check():
     """Kontrollib teenuse ja Ollama olekut."""
     ollama_status = "unknown"
@@ -514,5 +523,5 @@ def health_check():
 
 if __name__ == "__main__":
     import uvicorn
-    # KĆ¤ivitab serveri pordil 8000
+    # Käivitab serveri pordil 8000
     uvicorn.run(app, host="0.0.0.0", port=8000)

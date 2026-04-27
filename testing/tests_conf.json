@@ -1,0 +1,9 @@
+{
+  "max_threads": 16,
+  "tests": {
+    "llm-test": 16,
+    "bench-pre-check": 16,
+    "bench-post-check": 16,
+    "normalizer-test": 16
+  }
+}

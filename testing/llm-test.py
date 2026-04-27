@@ -25,14 +25,31 @@ except ImportError as exc:
 # --- KONFIGURATSIOON ---
 DATASET_FILE = "/testing/main_llm_dataset.json"
 LOG_FILE = "/testing/llm-test-log.json"
+TESTS_CONF_FILE = os.getenv("TESTS_CONF_FILE", "/testing/tests_conf.json")
 
 DEFAULT_MAIN_MODEL = os.getenv("LLM_TEST_MAIN_MODEL", "llama3:8b")
 DEFAULT_JUDGE_MODEL = os.getenv("LLM_TEST_JUDGE_MODEL", "gemma2:2b")
-DEFAULT_THREADS = int(os.getenv("LLM_TEST_THREADS", "4"))
 DEFAULT_TIMEOUT = int(os.getenv("LLM_TEST_TIMEOUT", "300"))
 DEFAULT_JUDGE_TIMEOUT = int(os.getenv("LLM_TEST_JUDGE_TIMEOUT", "300"))
 KEYWORD_PASS_THRESHOLD = float(os.getenv("LLM_TEST_KEYWORD_THRESHOLD", "0.5"))
 NO_CONTEXT_RESPONSE = "Esitatud kontekstis info puudub."
+
+
+def load_test_threads(test_name: str) -> int:
+    server_max = os.cpu_count() or 1
+    configured = 4
+
+    try:
+        with open(TESTS_CONF_FILE, "r", encoding="utf-8-sig") as handle:
+            conf = json.load(handle)
+        configured = int(conf.get("tests", {}).get(test_name, conf.get("max_threads", configured)))
+    except Exception:
+        configured = 4
+
+    return max(1, min(configured, server_max))
+
+
+DEFAULT_THREADS = load_test_threads("llm-test")
 
 
 def print_step(message: str) -> None:
@@ -399,7 +416,7 @@ def build_summary(results: List[Dict[str, Any]], started_at: float) -> Dict[str,
             avg_groundedness.append(metrics["groundedness_score"])
         if metrics["terminology_score"] is not None:
             avg_terminology.append(metrics["terminology_score"])
-        if metrics["hallucination"] is True:
+        if result["evaluation"]["checks"]["hallucination_ok"] is not True:
             hallucination_count += 1
         if metrics["parse_error"]:
             parse_error_count += 1
@@ -454,6 +471,7 @@ def run_llm_test() -> int:
     }
     print_step(f"ALUSTAN LLM TESTI ({len(dataset)} testilugu)")
     print_step(f"Põhimudel: {DEFAULT_MAIN_MODEL} | Hindajamudel: {DEFAULT_JUDGE_MODEL}")
+    print_step(f"Lõimi: {DEFAULT_THREADS} | server max: {os.cpu_count() or 1}")
     print_step(f"Märksõna lävend: {KEYWORD_PASS_THRESHOLD:.2f}")
 
     for index, case in enumerate(dataset, start=1):
@@ -495,7 +513,7 @@ def run_llm_test() -> int:
             f"relevance={evaluation['judge_metrics']['relevance_score']} | "
             f"groundedness={evaluation['judge_metrics']['groundedness_score']} | "
             f"terminology={evaluation['judge_metrics']['terminology_score']} | "
-            f"hallucination={evaluation['judge_metrics']['hallucination']}"
+            f"hallucination_ok={evaluation['checks']['hallucination_ok']}"
         )
 
         if evaluation["failure_reasons"]:

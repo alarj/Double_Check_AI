@@ -1,4 +1,4 @@
-﻿import base64
+import base64
 import json
 import os
 import subprocess
@@ -25,7 +25,7 @@ total_cores = os.cpu_count() or 1
 
 
 def log_json_event(data):
-    """Kirjutab sĆ¼ndmuse logifaili JSON formaadis."""
+    """Kirjutab sündmuse logifaili JSON formaadis."""
     try:
         with open(LOG_FILE, "a", encoding="utf-8") as f:
             f.write(json.dumps(data, ensure_ascii=False) + "\n")
@@ -54,7 +54,7 @@ def append_prompt_change_log(old_prompts, new_prompts):
         with open(PROMPTS_CHANGE_LOG_FILE, "w", encoding="utf-8") as f:
             json.dump(existing, f, indent=2, ensure_ascii=False)
     except Exception as e:
-        st.error(f"Prompti muutuse logimine ebaĆµnnestus: {e}")
+        st.error(f"Prompti muutuse logimine ebaõnnestus: {e}")
 
 
 def fetch_logs_via_api(source, limit=50):
@@ -123,7 +123,7 @@ def fetch_precheck_via_api(user_input, model, normalization_mode, threads, timeo
 
 
 def fetch_normalized_query_via_api(user_input, model, threads, timeout, gemini_api_key=""):
-    """Toob normaliseeritud pÄ†Ā¤ringu REST API /normalize endpointist."""
+    """Toob normaliseeritud päringu REST API /normalize endpointist."""
     try:
         auth_token = base64.b64encode(f"{API_USER}:{API_PASSWORD}".encode("utf-8")).decode("utf-8")
         req_data = {
@@ -224,7 +224,7 @@ def detect_git_branch():
 
 
 def detect_build_time():
-    """Tagastab build aja vĆµi viimase commit'i aja."""
+    """Tagastab build aja või viimase commit'i aja."""
     build_time = os.getenv("BUILD_TIME", "").strip()
     if build_time and build_time != "teadmata":
         return build_time
@@ -387,7 +387,7 @@ def render_response():
 # --- UI SEADISTAMINE ---
 st.set_page_config(page_title="Sinu nutikas AI assistent", layout="wide")
 
-# Session state algvĆ¤Ć¤rtustamine
+# Session state algväärtustamine
 if "processing" not in st.session_state:
     st.session_state.processing = False
 if "last_response" not in st.session_state:

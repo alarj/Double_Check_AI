@@ -1,4 +1,4 @@
-﻿import os
+import os
 import requests
 import json
 import re
@@ -8,17 +8,17 @@ import chromadb
 from chromadb.utils import embedding_functions
 
 # --- KONFIGURATSIOON ---
-# VĆµtame URL-id keskkonnamuutujatest (kooskĆµlas docker-compose'iga)
+# Võtame URL-id keskkonnamuutujatest (kooskõlas docker-compose'iga)
 OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
 OLLAMA_API_URL = f"{OLLAMA_URL}/api/generate"
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 GEMINI_BASE_URL = os.getenv("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta")
-# TĆ¤pne path vastavalt docker-compose volume'ile
+# Täpne path vastavalt docker-compose volume'ile
 CHROMA_DB_PATH = "/app/storage/vector_db"
 PROMPTS_FILE = "/app/prompts.json"
 
 # --- ANDMEBAASI SEADISTAMINE ---
-# KRIITILINE: SĆ¼nkroonis sinu viimase 'bge-m3' ingestiga
+# KRIITILINE: Sünkroonis sinu viimase 'bge-m3' ingestiga
 EMBEDDING_MODEL = "bge-m3"
 
 embedding_func = embedding_functions.OllamaEmbeddingFunction(
@@ -26,7 +26,7 @@ embedding_func = embedding_functions.OllamaEmbeddingFunction(
     url=OLLAMA_URL
 )
 
-# PersistentClient tagab ligipĆ¤Ć¤su salvestatud andmetele
+# PersistentClient tagab ligipääsu salvestatud andmetele
 client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
 collection = client.get_or_create_collection(
     name="procurements", 
@@ -35,11 +35,11 @@ collection = client.get_or_create_collection(
 
 # --- PROMPTIDE LAADIMINE ---
 def load_prompts():
-    """Laeb sĆ¼steemi juhised ja mallid JSON failist."""
+    """Laeb süsteemi juhised ja mallid JSON failist."""
     try:
         if os.path.exists(PROMPTS_FILE):
             # utf-8-sig loeb korrektselt ka BOM-iga JSON failid
-            # (nt kui fail on salvestatud Windowsi tĆ¶Ć¶riistadega).
+            # (nt kui fail on salvestatud Windowsi tööriistadega).
             with open(PROMPTS_FILE, "r", encoding="utf-8-sig") as f:
                 data = json.load(f)
                 if isinstance(data, dict):
@@ -60,12 +60,12 @@ def get_ee_time():
 
 def get_context(query, n_results=5, max_context_blocks=3):
     """
-    Teostab RAG-otsingu koos hĆ¼briidse skoorimisega (Vektor + MĆ¤rksĆµnad).
+    Teostab RAG-otsingu koos hübriidse skoorimisega (Vektor + Märksõnad).
     Optimeeritud bge-m3 distantsidele.
     """
     try:
-        # KĆ¼sime vektorbaasist rohkem kandidaate kui lĆµppvĆ¤ljundisse vaja,
-        # et Pythonis tehtav Ć¼mberreastamine ja dedupe saaks pĆ¤riselt mĆµjuda.
+        # Küsime vektorbaasist rohkem kandidaate kui lõppväljundisse vaja,
+        # et Pythonis tehtav ümberreastamine ja dedupe saaks päriselt mõjuda.
         fetch_k = max(int(n_results or 5), int(max_context_blocks or 3), 5) * 4
         results = collection.query(query_texts=[query], n_results=fetch_k)
         
@@ -83,17 +83,17 @@ def get_context(query, n_results=5, max_context_blocks=3):
         seen_snippets = set()
         
         for i, doc in enumerate(docs):
-            # Dublikaatide eemaldamine sisu alguse pĆµhjal
+            # Dublikaatide eemaldamine sisu alguse põhjal
             snippet = doc[:100].strip().lower()
             if snippet in seen_snippets:
                 continue
             seen_snippets.add(snippet)
 
             # Skoorimine bge-m3 jaoks:
-            # L2 distants: 0 on identne. 1.4 on piirvĆ¤Ć¤rtus, millest edasi on seos nĆµrk.
+            # L2 distants: 0 on identne. 1.4 on piirväärtus, millest edasi on seos nõrk.
             v_score = max(0, 1.4 - distances[i])
             
-            # MĆ¤rksĆµnade tĆ¤iendav kaal (HĆ¼briidne otsing)
+            # Märksõnade täiendav kaal (Hübriidne otsing)
             k_score = 0
             doc_lower = doc.lower()
             meta = metas[i] if i < len(metas) and isinstance(metas[i], dict) else {}
@@ -107,7 +107,7 @@ def get_context(query, n_results=5, max_context_blocks=3):
             doc_stems = {word[:5] for word in doc_words if len(word) >= 6}
 
             for word in query_words:
-                # Anname kaalu ainult sisulistele sĆµnadele
+                # Anname kaalu ainult sisulistele sõnadele
                 if len(word) > 4 and word in doc_lower:
                     k_score += 0.4
                 if len(word) > 4 and word in para_title:
@@ -132,15 +132,15 @@ def get_context(query, n_results=5, max_context_blocks=3):
             if query.lower() in display_name:
                 k_score += 0.25
 
-            # Kui enamik pĆ¤ringu sisulistest sĆµnadest elab pealkirjas,
-            # tasub see tĆµsta kĆµrgemale ka siis, kui vektorotsing eelistab detailseid erandeid.
+            # Kui enamik päringu sisulistest sõnadest elab pealkirjas,
+            # tasub see tõsta kõrgemale ka siis, kui vektorotsing eelistab detailseid erandeid.
             meaningful_words = {word for word in query_words if len(word) > 4}
             if meaningful_words:
                 title_overlap = meaningful_words & title_words
                 if len(title_overlap) >= max(1, len(meaningful_words) - 1):
                     k_score += 0.7
 
-            # Ćldiste teemakĆ¼simuste puhul eelistame section/subsection taset punktidele.
+            # Üldiste teemaküsimuste puhul eelistame section/subsection taset punktidele.
             if len(query_words) <= 5 and chunk_type == "section":
                 k_score += 0.2
 
@@ -160,11 +160,11 @@ def get_context(query, n_results=5, max_context_blocks=3):
             )
             scored_docs.append((final_score, source, doc, family_key))
 
-        # Sorteerime tulemused lĆµpliku hĆ¼briidse skoori jĆ¤rgi
+        # Sorteerime tulemused lõpliku hübriidse skoori järgi
         scored_docs.sort(key=lambda x: x[0], reverse=True)
 
-        # FAIL FAST lĆ¤vend: bge-m3 puhul on 0.65-0.7 turvaline piir
-        # See hoiab Ć¤ra hallutsinatsioonid tĆ¼hja konteksti baasilt
+        # FAIL FAST lävend: bge-m3 puhul on 0.65-0.7 turvaline piir
+        # See hoiab ära hallutsinatsioonid tühja konteksti baasilt
         if not scored_docs or scored_docs[0][0] < 0.65:
             return ""
 
@@ -194,7 +194,7 @@ def ask_ollama(
     response_format=None,
     stop=None,
 ):
-    """Saadab pĆ¤ringu Ollama API-le genereerimiseks."""
+    """Saadab päringu Ollama API-le genereerimiseks."""
     payload = {
         "model": model,
         "prompt": prompt,
@@ -223,7 +223,7 @@ def ask_ollama(
 
 def ask_gemini(model, prompt, timeout, max_output_tokens=128, api_key=None, response_schema=None):
     """
-    Saadab pĆ¤ringu Google Gemini API-le.
+    Saadab päringu Google Gemini API-le.
     Eeldab, et GEMINI_API_KEY on keskkonnamuutujas.
     """
     effective_key = (api_key or GEMINI_API_KEY or "").strip()
@@ -278,10 +278,10 @@ def ask_gemini(model, prompt, timeout, max_output_tokens=128, api_key=None, resp
             .get("parts", [])
         )
         if not parts:
-            return "VIGA: Gemini vastus oli tĆ¼hi."
+            return "VIGA: Gemini vastus oli tühi."
 
         text = parts[0].get("text", "")
-        return text or "VIGA: Gemini vastus oli tĆ¼hi."
+        return text or "VIGA: Gemini vastus oli tühi."
     except requests.exceptions.Timeout:
         return f"VIGA: Gemini aegumine ({timeout}s)."
     except Exception as e:
@@ -290,7 +290,7 @@ def ask_gemini(model, prompt, timeout, max_output_tokens=128, api_key=None, resp
 def parse_json_res(raw_res):
     """
     Robustne JSON parsimine tekstist.
-    Eemaldab vĆµimalikud Markdowni koodiplokid ja prĆ¼gi Ć¼mber JSON-i.
+    Eemaldab võimalikud Markdowni koodiplokid ja prügi ümber JSON-i.
     """
     if not raw_res: 
         return {}
@@ -298,7 +298,7 @@ def parse_json_res(raw_res):
     try:
         text = str(raw_res).strip()
         
-        # Otsime Ć¼les esimese '{' ja viimase '}'
+        # Otsime üles esimese '{' ja viimase '}'
         start = text.find('{')
         end = text.rfind('}') + 1
         
@@ -312,6 +312,6 @@ def parse_json_res(raw_res):
         return {}
 
 def parse_pre_check(raw_res):
-    """Eraldab eelkontrolli staatuse ja normaliseeritud pĆ¤ringu."""
+    """Eraldab eelkontrolli staatuse ja normaliseeritud päringu."""
     data = parse_json_res(raw_res)
     return data.get("status", "BLOCKED"), data.get("normalized_query", "")

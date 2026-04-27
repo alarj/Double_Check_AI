@@ -15,8 +15,11 @@
         "question":  "mille alusel valitakse edukas pakkumus?",
         "context":  "§ 50. Pakkumuste hindamine toimub eelnevalt kehtestatud kriteeriumide alusel...",
         "expected_keywords":  [
-                                  "hindamiskriteeriumid",
-                                  "majanduslikult soodsaim"
+                                  [
+                                      "kriteeriumide alusel",
+                                      "kehtestatud kriteeriumide",
+                                      "hindamiskriteeriumid"
+                                  ]
                               ],
         "forbidden_keywords":  [
                                    "juhuslikult",
