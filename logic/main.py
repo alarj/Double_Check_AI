@@ -683,7 +683,7 @@ if st.session_state.processing and st.session_state.current_query:
                     post_res = logic_core.ask_ollama(post_check_model_input, post_p, selected_threads, selected_timeout)
                     post_data = logic_core.parse_json_res(post_res)
                     p_status = post_data.get("status", "ALLOWED")
-                    post_analysis = post_data.get("analysis", post_res)
+                    post_analysis = post_data.get("analysis", post_data.get("reason", post_res))
                     post_duration = round(time.time() - step_start_post, 2)
                     update_ui(f"\u2705 Samm 4/4 valmis ({post_duration} sek)")
 
@@ -696,7 +696,6 @@ if st.session_state.processing and st.session_state.current_query:
                         "analysis": post_analysis,
                         "raw_response": post_res,
                     }
-
                     if p_status == "BLOCKED":
                         is_safe = False
                         main_answer = "**Vastus blokeeriti järelkontrolli poolt.**"

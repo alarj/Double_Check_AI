@@ -199,7 +199,7 @@ def parse_judge_response(raw_response: str) -> Dict[str, Any]:
 
 
 def is_no_context_case(case: Dict[str, Any], context: str) -> bool:
-    return case.get("type") == "out_of_domain" or not context.strip()
+    return case.get("type") in {"out_of_domain", "no_answer_in_context"} or not context.strip()
 
 
 def is_expected_no_context_answer(answer: str, expected_answer: str = NO_CONTEXT_RESPONSE) -> bool:
@@ -240,7 +240,8 @@ def judge_answer(
 Sa oled range LLM-vastuste hindaja.
 Hinda vastust ainult antud konteksti põhjal.
 
-Kui kontekst puudub ja vastus ütleb sisuliselt "Esitatud kontekstis info puudub",
+Kui kontekst puudub või kontekst ei sisalda küsimusele vastust, ja vastus
+ütleb sisuliselt "Esitatud kontekstis info puudub",
 siis see EI OLE hallutsinatsioon ja verdict peab olema PASS.
 
 Hallutsinatsioon tähendab ainult seda, et vastuses lisatakse infot,

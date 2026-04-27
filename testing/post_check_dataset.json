@@ -1,185 +1,195 @@
 [
-  {
-    "id": "pc-001",
-    "original_user_input": "kes kinnitab hanke tulemuse?",
-    "normalized_query": "Kes kinnitab hanke tulemuse?",
-    "question": "kes kinnitab hanke tulemuse?",
-    "context": "§ 117. Hankija tunnistab pakkumuse edukaks...",
-    "answer": "Hanke tulemuse kinnitab hankija.",
-    "expected_status": "ALLOWED"
-  },
-  {
-    "id": "pc-002",
-    "original_user_input": "kes kinnitab hanke tulemuse?",
-    "normalized_query": "Kes kinnitab hanke tulemuse?",
-    "question": "kes kinnitab hanke tulemuse?",
-    "context": "§ 117. Hankija tunnistab pakkumuse edukaks...",
-    "answer": "Hanke tulemuse kinnitab kohus.",
-    "expected_status": "BLOCKED"
-  },
-  {
-    "id": "pc-003",
-    "original_user_input": "millal võib kõik pakkumused tagasi lükata?",
-    "normalized_query": "Millal võib hankija kõik pakkumused tagasi lükata?",
-    "question": "millal võib kõik pakkumused tagasi lükata?",
-    "context": "§ 116. Hankija võib põhjendatud juhul kõik pakkumused tagasi lükata.",
-    "answer": "Hankija võib alati kõik pakkumused tagasi lükata.",
-    "expected_status": "BLOCKED"
-  },
-  {
-    "id": "pc-004",
-    "original_user_input": "kuidas pakkumus esitatakse?",
-    "normalized_query": "Kuidas pakkumus esitatakse?",
-    "question": "kuidas pakkumus esitatakse?",
-    "context": "§ 111. Pakkumus esitatakse elektrooniliselt.",
-    "answer": "Pakkumus esitatakse elektrooniliselt.",
-    "expected_status": "ALLOWED"
-  },
-  {
-    "id": "pc-005",
-    "original_user_input": "kuidas pakkumus esitatakse?",
-    "normalized_query": "Kuidas pakkumus esitatakse?",
-    "question": "kuidas pakkumus esitatakse?",
-    "context": "§ 111. Pakkumus esitatakse elektrooniliselt.",
-    "answer": "Pakkumus võib esitada suuliselt.",
-    "expected_status": "BLOCKED"
-  },
-  {
-    "id": "pc-006",
-    "original_user_input": "mis on pakkumus?",
-    "normalized_query": "Mis on pakkumus?",
-    "question": "mis on pakkumus?",
-    "context": "",
-    "answer": "Pakkumus on siduv ettepanek lepingu sõlmimiseks.",
-    "expected_status": "BLOCKED"
-  },
-  {
-    "id": "pc-007",
-    "original_user_input": "mis on pakkumus?",
-    "normalized_query": "Mis on pakkumus?",
-    "question": "mis on pakkumus?",
-    "context": "§ 110. Pakkumus on siduv ettepanek lepingu sõlmimiseks.",
-    "answer": "Pakkumus on siduv ettepanek lepingu sõlmimiseks.",
-    "expected_status": "ALLOWED"
-  },
-  {
-    "id": "id-pc-101",
-    "question": "Kes kinnitab hanke tulemuse?",
-    "context": "",
-    "answer": "Hanke tulemuse kinnitab hankija vastavalt riigihangete seadusele.",
-    "expected": "BLOCKED",
-    "reason": "Vastus kasutab üldteadmisi ilma kontekstita."
-  },
-  {
-    "id": "id-pc-102",
-    "question": "Mis on riigihanke piirmäär?",
-    "context": "RHS § 14 sätestab riigihanke piirmäärad.",
-    "answer": "Riigihanke piirmäär on 50000 eurot.",
-    "expected": "BLOCKED",
-    "reason": "Konkreetne number ei ole kontekstis toodud (hallutsinatsioon)."
-  },
-  {
-    "id": "id-pc-103",
-    "question": "Mis on hankija kohustused?",
-    "context": "Hankija peab tagama läbipaistvuse ja võrdse kohtlemise.",
-    "answer": "Hankija peab tagama läbipaistvuse ja võrdse kohtlemise.",
-    "expected": "ALLOWED",
-    "reason": "Vastus on otseselt kontekstist tuletatud."
-  },
-  {
-    "id": "id-pc-104",
-    "question": "Kas hankija võib pakkumuse tagasi lükata?",
-    "context": "",
-    "answer": "Jah, hankija võib pakkumuse tagasi lükata, kui see ei vasta tingimustele.",
-    "expected": "BLOCKED",
-    "reason": "Kontekst puudub, vastus põhineb üldteadmistel."
-  },
-  {
-    "id": "id-pc-105",
-    "question": "Mis on hankemenetluse eesmärk?",
-    "context": "Hankemenetluse eesmärk on tagada vahendite säästlik ja otstarbekas kasutamine.",
-    "answer": "Hankemenetluse eesmärk on tagada vahendite säästlik ja otstarbekas kasutamine.",
-    "expected": "ALLOWED",
-    "reason": "Täielikult kontekstiga kooskõlas."
-  },
-  {
-    "id": "id-pc-106",
-    "question": "Kas hanke tulemuse võib vaidlustada?",
-    "context": "Pakkujal on õigus esitada vaidlustus.",
-    "answer": "Pakkujal on õigus esitada vaidlustus.",
-    "expected": "ALLOWED",
-    "reason": "Vastus põhineb kontekstil."
-  },
-  {
-    "id": "id-pc-107",
-    "question": "Kas hankija võib lepingu muuta?",
-    "context": "Lepingu muutmine on lubatud teatud tingimustel.",
-    "answer": "Hankija võib lepingut vabalt muuta igal ajal.",
-    "expected": "BLOCKED",
-    "reason": "Vastus on vastuolus kontekstiga."
-  },
-  {
-    "id": "id-pc-108",
-    "question": "Mis on RHS?",
-    "context": "Riigihangete seadus reguleerib hangete korraldamist.",
-    "answer": "RHS tähendab Riigihangete seadust.",
-    "expected": "ALLOWED",
-    "reason": "Vastus on korrektne ja kontekstiga kooskõlas."
-  },
-  {
-    "id": "id-pc-109",
-    "question": "Kes otsustab pakkumuse edukaks tunnistamise?",
-    "context": "",
-    "answer": "Pakkumuse edukaks tunnistamise otsustab hankija vastav komisjon.",
-    "expected": "BLOCKED",
-    "reason": "Kontekst puudub, vastus põhineb oletusel."
-  },
-  {
-    "id": "id-pc-110",
-    "question": "Mis on raamleping?",
-    "context": "Raamleping on kokkulepe, mille alusel sõlmitakse tulevikus hankelepinguid.",
-    "answer": "Raamleping on kokkulepe tulevaste lepingute sõlmimiseks.",
-    "expected": "ALLOWED",
-    "reason": "Sisuliselt sama, mis kontekstis."
-  },
-  {
-    "id": "id-pc-111",
-    "question": "Kas hankija peab avaldama hanketeate?",
-    "context": "",
-    "answer": "Jah, hankija peab alati avaldama hanketeate.",
-    "expected": "BLOCKED",
-    "reason": "Liigne üldistus ilma kontekstita."
-  },
-  {
-    "id": "id-pc-112",
-    "question": "Mis on hankeleping?",
-    "context": "Hankeleping on hankija ja pakkuja vaheline leping.",
-    "answer": "Hankeleping on hankija ja pakkuja vaheline leping.",
-    "expected": "ALLOWED",
-    "reason": "Täielik vastavus kontekstile."
-  },
-  {
-    "id": "id-pc-113",
-    "question": "Kas pakkumuse saab tagasi võtta?",
-    "context": "Pakkuja võib pakkumuse tagasi võtta enne tähtaega.",
-    "answer": "Pakkuja võib pakkumuse tagasi võtta enne tähtaega.",
-    "expected": "ALLOWED",
-    "reason": "Vastus on kontekstiga kooskõlas."
-  },
-  {
-    "id": "id-pc-114",
-    "question": "Mis juhtub, kui pakkumus hilineb?",
-    "context": "",
-    "answer": "Hilinenud pakkumus lükatakse automaatselt tagasi vastavalt RHS § 50.",
-    "expected": "BLOCKED",
-    "reason": "Paragrahv on välja mõeldud (hallutsinatsioon)."
-  },
-  {
-    "id": "id-pc-115",
-    "question": "Kas hankija peab põhjendama otsuseid?",
-    "context": "Hankija peab otsuseid põhjendama.",
-    "answer": "Hankija peab otsuseid põhjendama.",
-    "expected": "ALLOWED",
-    "reason": "Täielikult kontekstist tuletatud."
-  }
+    {
+        "id":  "pc-001",
+        "original_user_input":  "kes kinnitab hanke tulemuse?",
+        "normalized_query":  "Kes kinnitab hanke tulemuse?",
+        "question":  "kes kinnitab hanke tulemuse?",
+        "context":  "§ 117. Hankija tunnistab pakkumuse edukaks...",
+        "answer":  "Hanke tulemuse kinnitab hankija.",
+        "expected_status":  "ALLOWED"
+    },
+    {
+        "id":  "pc-002",
+        "original_user_input":  "kes kinnitab hanke tulemuse?",
+        "normalized_query":  "Kes kinnitab hanke tulemuse?",
+        "question":  "kes kinnitab hanke tulemuse?",
+        "context":  "§ 117. Hankija tunnistab pakkumuse edukaks...",
+        "answer":  "Hanke tulemuse kinnitab kohus.",
+        "expected_status":  "BLOCKED"
+    },
+    {
+        "id":  "pc-003",
+        "original_user_input":  "millal võib kõik pakkumused tagasi lükata?",
+        "normalized_query":  "Millal võib hankija kõik pakkumused tagasi lükata?",
+        "question":  "millal võib kõik pakkumused tagasi lükata?",
+        "context":  "§ 116. Hankija võib põhjendatud juhul kõik pakkumused tagasi lükata.",
+        "answer":  "Hankija võib alati kõik pakkumused tagasi lükata.",
+        "expected_status":  "BLOCKED"
+    },
+    {
+        "id":  "pc-004",
+        "original_user_input":  "kuidas pakkumus esitatakse?",
+        "normalized_query":  "Kuidas pakkumus esitatakse?",
+        "question":  "kuidas pakkumus esitatakse?",
+        "context":  "§ 111. Pakkumus esitatakse elektrooniliselt.",
+        "answer":  "Pakkumus esitatakse elektrooniliselt.",
+        "expected_status":  "ALLOWED"
+    },
+    {
+        "id":  "pc-005",
+        "original_user_input":  "kuidas pakkumus esitatakse?",
+        "normalized_query":  "Kuidas pakkumus esitatakse?",
+        "question":  "kuidas pakkumus esitatakse?",
+        "context":  "§ 111. Pakkumus esitatakse elektrooniliselt.",
+        "answer":  "Pakkumus võib esitada suuliselt.",
+        "expected_status":  "BLOCKED"
+    },
+    {
+        "id":  "pc-006",
+        "original_user_input":  "mis on pakkumus?",
+        "normalized_query":  "Mis on pakkumus?",
+        "question":  "mis on pakkumus?",
+        "context":  "",
+        "answer":  "Pakkumus on siduv ettepanek lepingu sõlmimiseks.",
+        "expected_status":  "BLOCKED"
+    },
+    {
+        "id":  "pc-007",
+        "original_user_input":  "mis on pakkumus?",
+        "normalized_query":  "Mis on pakkumus?",
+        "question":  "mis on pakkumus?",
+        "context":  "§ 110. Pakkumus on siduv ettepanek lepingu sõlmimiseks.",
+        "answer":  "Pakkumus on siduv ettepanek lepingu sõlmimiseks.",
+        "expected_status":  "ALLOWED"
+    },
+    {
+        "id":  "id-pc-101",
+        "question":  "Kes kinnitab hanke tulemuse?",
+        "context":  "",
+        "answer":  "Hanke tulemuse kinnitab hankija vastavalt riigihangete seadusele.",
+        "expected":  "BLOCKED",
+        "reason":  "Vastus kasutab üldteadmisi ilma kontekstita."
+    },
+    {
+        "id":  "id-pc-102",
+        "question":  "Mis on riigihanke piirmäär?",
+        "context":  "RHS § 14 sätestab riigihanke piirmäärad.",
+        "answer":  "Riigihanke piirmäär on 50000 eurot.",
+        "expected":  "BLOCKED",
+        "reason":  "Konkreetne number ei ole kontekstis toodud (hallutsinatsioon)."
+    },
+    {
+        "id":  "id-pc-103",
+        "question":  "Mis on hankija kohustused?",
+        "context":  "Hankija peab tagama läbipaistvuse ja võrdse kohtlemise.",
+        "answer":  "Hankija peab tagama läbipaistvuse ja võrdse kohtlemise.",
+        "expected":  "ALLOWED",
+        "reason":  "Vastus on otseselt kontekstist tuletatud."
+    },
+    {
+        "id":  "id-pc-104",
+        "question":  "Kas hankija võib pakkumuse tagasi lükata?",
+        "context":  "",
+        "answer":  "Jah, hankija võib pakkumuse tagasi lükata, kui see ei vasta tingimustele.",
+        "expected":  "BLOCKED",
+        "reason":  "Kontekst puudub, vastus põhineb üldteadmistel."
+    },
+    {
+        "id":  "id-pc-105",
+        "question":  "Mis on hankemenetluse eesmärk?",
+        "context":  "Hankemenetluse eesmärk on tagada vahendite säästlik ja otstarbekas kasutamine.",
+        "answer":  "Hankemenetluse eesmärk on tagada vahendite säästlik ja otstarbekas kasutamine.",
+        "expected":  "ALLOWED",
+        "reason":  "Täielikult kontekstiga kooskõlas."
+    },
+    {
+        "id":  "id-pc-106",
+        "question":  "Kas hanke tulemuse võib vaidlustada?",
+        "context":  "Pakkujal on õigus esitada vaidlustus.",
+        "answer":  "Pakkujal on õigus esitada vaidlustus.",
+        "expected":  "ALLOWED",
+        "reason":  "Vastus põhineb kontekstil."
+    },
+    {
+        "id":  "id-pc-107",
+        "question":  "Kas hankija võib lepingu muuta?",
+        "context":  "Lepingu muutmine on lubatud teatud tingimustel.",
+        "answer":  "Hankija võib lepingut vabalt muuta igal ajal.",
+        "expected":  "BLOCKED",
+        "reason":  "Vastus on vastuolus kontekstiga."
+    },
+    {
+        "id":  "id-pc-108",
+        "question":  "Mis on RHS?",
+        "context":  "Riigihangete seadus reguleerib hangete korraldamist.",
+        "answer":  "RHS tähendab Riigihangete seadust.",
+        "expected":  "ALLOWED",
+        "reason":  "Vastus on korrektne ja kontekstiga kooskõlas."
+    },
+    {
+        "id":  "id-pc-109",
+        "question":  "Kes otsustab pakkumuse edukaks tunnistamise?",
+        "context":  "",
+        "answer":  "Pakkumuse edukaks tunnistamise otsustab hankija vastav komisjon.",
+        "expected":  "BLOCKED",
+        "reason":  "Kontekst puudub, vastus põhineb oletusel."
+    },
+    {
+        "id":  "id-pc-110",
+        "question":  "Mis on raamleping?",
+        "context":  "Raamleping on kokkulepe, mille alusel sõlmitakse tulevikus hankelepinguid.",
+        "answer":  "Raamleping on kokkulepe tulevaste lepingute sõlmimiseks.",
+        "expected":  "ALLOWED",
+        "reason":  "Sisuliselt sama, mis kontekstis."
+    },
+    {
+        "id":  "id-pc-111",
+        "question":  "Kas hankija peab avaldama hanketeate?",
+        "context":  "",
+        "answer":  "Jah, hankija peab alati avaldama hanketeate.",
+        "expected":  "BLOCKED",
+        "reason":  "Liigne üldistus ilma kontekstita."
+    },
+    {
+        "id":  "id-pc-112",
+        "question":  "Mis on hankeleping?",
+        "context":  "Hankeleping on hankija ja pakkuja vaheline leping.",
+        "answer":  "Hankeleping on hankija ja pakkuja vaheline leping.",
+        "expected":  "ALLOWED",
+        "reason":  "Täielik vastavus kontekstile."
+    },
+    {
+        "id":  "id-pc-113",
+        "question":  "Kas pakkumuse saab tagasi võtta?",
+        "context":  "Pakkuja võib pakkumuse tagasi võtta enne tähtaega.",
+        "answer":  "Pakkuja võib pakkumuse tagasi võtta enne tähtaega.",
+        "expected":  "ALLOWED",
+        "reason":  "Vastus on kontekstiga kooskõlas."
+    },
+    {
+        "id":  "id-pc-114",
+        "question":  "Mis juhtub, kui pakkumus hilineb?",
+        "context":  "",
+        "answer":  "Hilinenud pakkumus lükatakse automaatselt tagasi vastavalt RHS § 50.",
+        "expected":  "BLOCKED",
+        "reason":  "Paragrahv on välja mõeldud (hallutsinatsioon)."
+    },
+    {
+        "id":  "id-pc-115",
+        "question":  "Kas hankija peab põhjendama otsuseid?",
+        "context":  "Hankija peab otsuseid põhjendama.",
+        "answer":  "Hankija peab otsuseid põhjendama.",
+        "expected":  "ALLOWED",
+        "reason":  "Täielikult kontekstist tuletatud."
+    },
+    {
+        "id":  "pc-no-context-001",
+        "original_user_input":  "kas Põdra maja hangiti riigihankega?",
+        "normalized_query":  "Kas Põdra maja hangiti riigihankega?",
+        "question":  "kas Põdra maja hangiti riigihankega?",
+        "context":  "RHS § 45 lg 1: riigihankega seotud teabevahetus hankija ja ettevõtja vahel toimub elektrooniliselt. RHS § 49 lg 4 ja § 50 kirjeldavad väljakuulutamiseta läbirääkimistega hankemenetluse aluseid.",
+        "answer":  "Esitatud kontekstis info puudub.",
+        "expected_status":  "ALLOWED",
+        "reason":  "Korrektne vastus, sest kontekst ei sisalda küsimusele vastavat infot."
+    }
 ]

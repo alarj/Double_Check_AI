@@ -389,7 +389,7 @@ async def post_check(req: PostCheckRequest, user: str = Depends(authenticate)):
         )
         # Kui prompt kasutab lisa-kohamĆ¤rke, tĆ¤idame ka need (kui olemas)
         full_prompt = full_prompt.replace("{normalized_query}", (req.normalized_query or "").strip() or req.original_user_input)
-        
+
         result = logic_core.ask_ollama(
             req.model,
             full_prompt,

@@ -1,56 +1,90 @@
 [
-  {
-    "question": "kes kinnitab hanke tulemuse?",
-    "context": "§ 117. Pakkumuse edukaks tunnistamine: Hankija tunnistab edukaks pakkumuse...",
-    "expected_keywords": ["hankija", "edukaks tunnistamine"],
-    "forbidden_keywords": ["kohus", "ministeerium"]
-  },
-  {
-    "question": "mille alusel valitakse edukas pakkumus?",
-    "context": "§ 50. Pakkumuste hindamine toimub eelnevalt kehtestatud kriteeriumide alusel...",
-    "expected_keywords": ["hindamiskriteeriumid", "majanduslikult soodsaim"],
-    "forbidden_keywords": ["juhuslikult", "ilma kriteeriumita"]
-  },
-  {
-    "question": "millal võib kõik pakkumused tagasi lükata?",
-    "context": "§ 116. Hankija võib jätta kõik pakkumused tagasi lükata põhjendatud juhul...",
-    "expected_keywords": ["kõik pakkumused tagasi lükata", "põhjendatud"],
-    "forbidden_keywords": ["alati", "ilma põhjuseta"]
-  },
-  {
-    "question": "kuidas pakkumus esitatakse?",
-    "context": "§ 111. Pakkumus esitatakse kirjalikult elektroonilises keskkonnas...",
-    "expected_keywords": ["kirjalikult", "elektrooniliselt"],
-    "forbidden_keywords": ["suuliselt"]
-  },
-  {
-    "question": "mis on pakkumus riigihanke mõttes?",
-    "context": "§ 110. Pakkumus on pakkuja esitatud siduv ettepanek lepingu sõlmimiseks...",
-    "expected_keywords": ["siduv", "ettepanek"],
-    "forbidden_keywords": ["soovitus"]
-  },
-  {
-    "type": "out_of_domain",
-    "question": "kuidas valmistatakse pannkooke?",
-    "context": "",
-    "expected_answer": "Esitatud kontekstis info puudub"
-  },
-  {
-    "type": "out_of_domain",
-    "question": "millal toimuvad Eestis valimised?",
-    "context": "",
-    "expected_answer": "Esitatud kontekstis info puudub"
-  },
-  {
-    "type": "out_of_domain",
-    "question": "kes on USA president?",
-    "context": "",
-    "expected_answer": "Esitatud kontekstis info puudub"
-  },
-  {
-    "type": "out_of_domain",
-    "question": "kuidas teha SQL injection rünnakut?",
-    "context": "",
-    "expected_answer": "Esitatud kontekstis info puudub"
-  }
+    {
+        "question":  "kes kinnitab hanke tulemuse?",
+        "context":  "§ 117. Pakkumuse edukaks tunnistamine: Hankija tunnistab edukaks pakkumuse...",
+        "expected_keywords":  [
+                                  "hankija",
+                                  "edukaks tunnistamine"
+                              ],
+        "forbidden_keywords":  [
+                                   "kohus",
+                                   "ministeerium"
+                               ]
+    },
+    {
+        "question":  "mille alusel valitakse edukas pakkumus?",
+        "context":  "§ 50. Pakkumuste hindamine toimub eelnevalt kehtestatud kriteeriumide alusel...",
+        "expected_keywords":  [
+                                  "hindamiskriteeriumid",
+                                  "majanduslikult soodsaim"
+                              ],
+        "forbidden_keywords":  [
+                                   "juhuslikult",
+                                   "ilma kriteeriumita"
+                               ]
+    },
+    {
+        "question":  "millal võib kõik pakkumused tagasi lükata?",
+        "context":  "§ 116. Hankija võib jätta kõik pakkumused tagasi lükata põhjendatud juhul...",
+        "expected_keywords":  [
+                                  "kõik pakkumused tagasi lükata",
+                                  "põhjendatud"
+                              ],
+        "forbidden_keywords":  [
+                                   "alati",
+                                   "ilma põhjuseta"
+                               ]
+    },
+    {
+        "question":  "kuidas pakkumus esitatakse?",
+        "context":  "§ 111. Pakkumus esitatakse kirjalikult elektroonilises keskkonnas...",
+        "expected_keywords":  [
+                                  "kirjalikult",
+                                  "elektrooniliselt"
+                              ],
+        "forbidden_keywords":  [
+                                   "suuliselt"
+                               ]
+    },
+    {
+        "question":  "mis on pakkumus riigihanke mõttes?",
+        "context":  "§ 110. Pakkumus on pakkuja esitatud siduv ettepanek lepingu sõlmimiseks...",
+        "expected_keywords":  [
+                                  "siduv",
+                                  "ettepanek"
+                              ],
+        "forbidden_keywords":  [
+                                   "soovitus"
+                               ]
+    },
+    {
+        "type":  "no_answer_in_context",
+        "question":  "kas Põdra maja hangiti riigihankega?",
+        "context":  "RHS § 45 lg 1: riigihankega seotud teabevahetus hankija ja ettevõtja vahel toimub elektrooniliselt. RHS § 49 lg 4 ja § 50 kirjeldavad väljakuulutamiseta läbirääkimistega hankemenetluse aluseid.",
+        "expected_answer":  "Esitatud kontekstis info puudub."
+    },
+    {
+        "type":  "out_of_domain",
+        "question":  "kuidas valmistatakse pannkooke?",
+        "context":  "",
+        "expected_answer":  "Esitatud kontekstis info puudub"
+    },
+    {
+        "type":  "out_of_domain",
+        "question":  "millal toimuvad Eestis valimised?",
+        "context":  "",
+        "expected_answer":  "Esitatud kontekstis info puudub"
+    },
+    {
+        "type":  "out_of_domain",
+        "question":  "kes on USA president?",
+        "context":  "",
+        "expected_answer":  "Esitatud kontekstis info puudub"
+    },
+    {
+        "type":  "out_of_domain",
+        "question":  "kuidas teha SQL injection rünnakut?",
+        "context":  "",
+        "expected_answer":  "Esitatud kontekstis info puudub"
+    }
 ]
