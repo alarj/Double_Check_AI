@@ -58,7 +58,7 @@ def get_ee_time():
     """Tagastab Eesti aja logimiseks."""
     return datetime.now(ZoneInfo("Europe/Tallinn"))
 
-def get_context(query, n_results=5, max_context_blocks=3):
+def get_context(query, n_results=5, max_context_blocks=3, return_debug=False):
     """
     Teostab RAG-otsingu koos hübriidse skoorimisega (Vektor + Märksõnad).
     Optimeeritud bge-m3 distantsidele.
@@ -70,6 +70,8 @@ def get_context(query, n_results=5, max_context_blocks=3):
         results = collection.query(query_texts=[query], n_results=fetch_k)
         
         if not results or not results['documents'] or not results['documents'][0]:
+            if return_debug:
+                return "", {"fetch_k": fetch_k, "candidates": []}
             return ""
 
         docs = results['documents'][0]
@@ -158,7 +160,7 @@ def get_context(query, n_results=5, max_context_blocks=3):
                 str(meta.get("section", "")),
                 str(meta.get("subsection", "")),
             )
-            scored_docs.append((final_score, source, doc, family_key))
+            scored_docs.append((final_score, source, doc, family_key, meta))
 
         # Sorteerime tulemused lõpliku hübriidse skoori järgi
         scored_docs.sort(key=lambda x: x[0], reverse=True)
@@ -166,23 +168,58 @@ def get_context(query, n_results=5, max_context_blocks=3):
         # FAIL FAST lävend: bge-m3 puhul on 0.65-0.7 turvaline piir
         # See hoiab ära hallutsinatsioonid tühja konteksti baasilt
         if not scored_docs or scored_docs[0][0] < 0.65:
+            if return_debug:
+                return "", {
+                    "fetch_k": fetch_k,
+                    "candidates": [
+                        {
+                            "rank": i + 1,
+                            "score": round(sc, 4),
+                            "source": s,
+                            "selected": False,
+                            "metadata": m,
+                            "text": d,
+                        }
+                        for i, (sc, s, d, _family_key, m) in enumerate(scored_docs)
+                    ],
+                }
             return ""
 
         formatted_results = []
         seen_families = set()
+        selected_indexes = set()
         limit = max(1, int(max_context_blocks or 3))
-        for sc, s, d, family_key in scored_docs:
+        for selected_index, (sc, s, d, family_key, meta) in enumerate(scored_docs):
             if family_key in seen_families:
                 continue
             seen_families.add(family_key)
+            selected_indexes.add(selected_index)
             formatted_results.append(f"--- ALLIKAS: {s} ---\n{d}")
             if len(formatted_results) >= limit:
                 break
             
-        return "\n\n".join(formatted_results)
+        context = "\n\n".join(formatted_results)
+        if return_debug:
+            return context, {
+                "fetch_k": fetch_k,
+                "candidates": [
+                    {
+                        "rank": i + 1,
+                        "score": round(sc, 4),
+                        "source": s,
+                        "selected": i in selected_indexes,
+                        "metadata": m,
+                        "text": d,
+                    }
+                    for i, (sc, s, d, family_key, m) in enumerate(scored_docs)
+                ],
+            }
+        return context
         
     except Exception as e:
         print(f"VIGA konteksti loomisel: {e}")
+        if return_debug:
+            return "", {"error": str(e), "fetch_k": None, "candidates": []}
         return ""
 
 def ask_ollama(

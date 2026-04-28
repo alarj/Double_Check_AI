@@ -71,13 +71,14 @@ def fetch_logs_via_api(source, limit=50):
         return [], str(e)
 
 
-def fetch_retrieval_context_via_api(query_text, n_results=5):
+def fetch_retrieval_context_via_api(query_text, n_results=5, max_context_blocks=3):
     """Toob RAG konteksti REST API /retrieval endpointist."""
     try:
         auth_token = base64.b64encode(f"{API_USER}:{API_PASSWORD}".encode("utf-8")).decode("utf-8")
         payload = json.dumps({
             "query": query_text,
             "n_results": n_results,
+            "max_context_blocks": max_context_blocks,
         }).encode("utf-8")
         req = urllib.request.Request(
             f"{API_BASE_URL}/retrieval",
@@ -321,6 +322,7 @@ def render_logs():
             "test-post-check",
             "test-llm",
             "test-retrieval",
+            "test-stability",
             "test-benchmark-embeddings",
             "test-normalizer",
             "prompts-change",
@@ -421,8 +423,38 @@ with st.sidebar:
     st.subheader("Serveri sätted")
     st.caption(f"Build aeg: {build_time}")
     st.caption(f"Git haru: {build_branch}")
-    selected_threads = st.number_input("Lõimi (threads):", 1, total_cores, total_cores, disabled=is_disabled)
-    selected_timeout = st.number_input("Timeout (sek):", 30, 1200, 360, disabled=is_disabled)
+    selected_threads = st.number_input(
+        "Lõimi (threads):",
+        1,
+        total_cores,
+        total_cores,
+        disabled=is_disabled,
+        help="Mitu CPU lõime antakse mudelile vastuse arvutamiseks. Kui serveris on vähem lõimi, kasutatakse serveri tegelikku ülempiiri.",
+    )
+    selected_timeout = st.number_input(
+        "Timeout (sek):",
+        30,
+        1200,
+        360,
+        disabled=is_disabled,
+        help="Maksimaalne aeg sekundites, kui kaua üks mudeli või API samm võib vastust oodata.",
+    )
+    selected_n_results = st.number_input(
+        "Retrieval kandidaate:",
+        1,
+        25,
+        5,
+        disabled=is_disabled,
+        help="Mitu tulemust retrieval päringule baasparameetrina küsitakse. Taustal võidakse ümberreastamiseks küsida rohkem kandidaate.",
+    )
+    selected_max_context_blocks = st.number_input(
+        "Kontekstiplokke:",
+        1,
+        25,
+        3,
+        disabled=is_disabled,
+        help="Mitu parimaks hinnatud kontekstiplokki antakse lõpuks põhimudelile vastuse koostamiseks.",
+    )
 
     st.divider()
     st.subheader("Mudelid")
@@ -633,7 +665,11 @@ if st.session_state.processing and st.session_state.current_query:
         if is_safe:
             update_ui(f"\U0001F4DA Samm 2/4: Otsin konteksti | päring: {active_query}")
             ctx_start = time.time()
-            fetched_context, retrieval_data, retrieval_error = fetch_retrieval_context_via_api(active_query)
+            fetched_context, retrieval_data, retrieval_error = fetch_retrieval_context_via_api(
+                active_query,
+                n_results=selected_n_results,
+                max_context_blocks=selected_max_context_blocks,
+            )
             if retrieval_error:
                 raise RuntimeError(f"Retrieval API viga: {retrieval_error}")
             context_found = len(fetched_context.strip()) > 0

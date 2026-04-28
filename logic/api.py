@@ -27,6 +27,7 @@ TEST_LOG_FILES = {
     "test-post-check": "/testing/bench-post-check-log.json",
     "test-llm": "/testing/llm-test-log.json",
     "test-retrieval": "/testing/retr-test-log.json",
+    "test-stability": "/testing/stability-test-log.json",
     "test-benchmark-embeddings": "/testing/benchmark_embeddings-log.json",
     "test-normalizer": "/testing/normalizer-test-log.json",
     "prompts-change": "/app/prompts_change_log.json",
@@ -338,10 +339,11 @@ async def run_retrieval(req: RetrievalRequest, user: str = Depends(authenticate)
     try:
         n_results = req.n_results or 5
         max_context_blocks = req.max_context_blocks or 3
-        context = logic_core.get_context(
+        context, retrieval_debug = logic_core.get_context(
             req.query,
             n_results=n_results,
             max_context_blocks=max_context_blocks,
+            return_debug=True,
         )
         duration = time.time() - start_time
         blocks = [f"--- ALLIKAS:{block}" for block in context.split("--- ALLIKAS:") if block.strip()]
@@ -354,6 +356,11 @@ async def run_retrieval(req: RetrievalRequest, user: str = Depends(authenticate)
             "found": bool(context.strip()),
             "context": context,
             "sources_returned": [block[:100] + "..." for block in blocks],
+            "sources_returned_raw": retrieval_debug.get("candidates", []),
+            "retrieval_debug": {
+                "fetch_k": retrieval_debug.get("fetch_k"),
+                "candidate_count": len(retrieval_debug.get("candidates", [])),
+            },
             "raw_context_preview": (context[:200] + "...") if context else "PUUDUB",
             "duration": round(duration * 1000, 2),
         }
@@ -434,6 +441,7 @@ def get_logs(
             "test-post-check",
             "test-llm",
             "test-retrieval",
+            "test-stability",
             "test-benchmark-embeddings",
             "test-normalizer",
             "prompts-change",
@@ -460,22 +468,54 @@ def get_logs(
             raw_content = f.read().strip()
 
         # Toetame nii JSONL (1 kirje rea kohta), JSON listi kui ka ühte JSON objekti.
+        # API ja UI logid on praktikas JSONL; mitu "{...}" rida ei ole üks JSON objekt.
         entries = []
         if raw_content:
             if raw_content.startswith("["):
-                parsed = json.loads(raw_content)
-                if isinstance(parsed, list):
-                    entries = parsed
-            elif raw_content.startswith("{"):
-                parsed = json.loads(raw_content)
-                if isinstance(parsed, dict):
-                    entries = [parsed]
+                try:
+                    parsed = json.loads(raw_content)
+                    if isinstance(parsed, list):
+                        entries = parsed
+                except Exception:
+                    entries = []
+            elif raw_content.startswith("{") and "\n" not in raw_content:
+                try:
+                    parsed = json.loads(raw_content)
+                    if isinstance(parsed, dict):
+                        entries = [parsed]
+                except Exception:
+                    entries = []
             else:
                 for line in raw_content.splitlines():
                     line = line.strip()
                     if not line:
                         continue
-                    entries.append(json.loads(line))
+                    try:
+                        entries.append(json.loads(line))
+                    except Exception:
+                        entries.append({
+                            "timestamp": "",
+                            "status": "ERROR",
+                            "endpoint": "log-parse",
+                            "error": "Logirida ei olnud korrektne JSON ja jäeti vaates vahele.",
+                            "raw_preview": line[:300],
+                        })
+
+            if not entries and "\n" in raw_content:
+                for line in raw_content.splitlines():
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        entries.append(json.loads(line))
+                    except Exception:
+                        entries.append({
+                            "timestamp": "",
+                            "status": "ERROR",
+                            "endpoint": "log-parse",
+                            "error": "Logirida ei olnud korrektne JSON ja jäeti vaates vahele.",
+                            "raw_preview": line[:300],
+                        })
 
         for entry in entries[-500:]:
             if not isinstance(entry, dict):
