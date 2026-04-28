@@ -228,6 +228,7 @@ def run_case(
 
     iterations: List[Dict[str, Any]] = []
     errors: List[Dict[str, Any]] = []
+    progress_step = max(1, min(repeat // 10, 25))
 
     for iteration in range(1, repeat + 1):
         started = time.time()
@@ -260,11 +261,10 @@ def run_case(
                 "error": str(exc),
             })
 
-        if iteration == 1 or iteration == repeat or iteration % max(1, repeat // 10) == 0:
+        if iteration == 1 or iteration == repeat or iteration % progress_step == 0:
             print_step(f"[{case_index}] edenemine {iteration}/{repeat}")
 
         if pause_seconds > 0 and iteration < repeat:
-            print_step(f"[{case_index}] paus {pause_seconds}s enne järgmist katset")
             time.sleep(pause_seconds)
 
     context_hashes = [item["context_normalized_hash"] for item in iterations]
