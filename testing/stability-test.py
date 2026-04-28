@@ -316,16 +316,16 @@ def select_cases(
     question: Optional[str],
     case_index: Optional[int],
     limit: Optional[int],
-) -> List[Dict[str, Any]]:
+) -> tuple[List[Dict[str, Any]], str]:
     if question:
         return [{
             "question": question,
-        }]
+        }], "config_question"
     if case_index is not None:
         if case_index < 1 or case_index > len(dataset):
             raise ValueError(f"case-index peab olema vahemikus 1..{len(dataset)}")
-        return [dataset[case_index - 1]]
-    return dataset[:limit] if limit is not None else dataset
+        return [dataset[case_index - 1]], "dataset_case_index"
+    return (dataset[:limit] if limit is not None else dataset), "dataset"
 
 
 def build_summary(results: List[Dict[str, Any]], started_at: float) -> Dict[str, Any]:
@@ -377,7 +377,7 @@ def main() -> int:
 
     dataset = load_dataset(args.dataset)
     try:
-        cases = select_cases(dataset, args.question, args.case_index, args.limit)
+        cases, case_source = select_cases(dataset, args.question, args.case_index, args.limit)
     except ValueError as exc:
         print_step(f"VIGA: {exc}")
         return 1
@@ -399,6 +399,7 @@ def main() -> int:
             "n_results": args.n_results,
             "max_context_blocks": args.max_context_blocks,
             "pause_seconds": args.pause_seconds,
+            "case_source": case_source,
             "case_count": len(cases),
         },
         "results": [],
