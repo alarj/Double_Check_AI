@@ -6,6 +6,7 @@
       "question": "kui suur on lihthanke piirmäär",
       "repeat": 20,
       "threads": 4,
+      "timeout": 360,
       "n_results": 5,
       "max_context_blocks": 3,
       "pause_seconds": 0

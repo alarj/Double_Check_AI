@@ -69,6 +69,7 @@ def load_test_config() -> Dict[str, Any]:
         "question": "",
         "repeat": DEFAULT_REPEAT,
         "threads": DEFAULT_THREADS,
+        "timeout": DEFAULT_TIMEOUT,
         "n_results": DEFAULT_N_RESULTS,
         "max_context_blocks": DEFAULT_MAX_CONTEXT_BLOCKS,
         "pause_seconds": 0,
@@ -86,6 +87,7 @@ def load_test_config() -> Dict[str, Any]:
             config["question"] = str(stability_conf.get("question", config["question"])).strip()
             config["repeat"] = int(stability_conf.get("repeat", config["repeat"]))
             config["threads"] = int(stability_conf.get("threads", config["threads"]))
+            config["timeout"] = int(stability_conf.get("timeout", config["timeout"]))
             config["n_results"] = int(stability_conf.get("n_results", config["n_results"]))
             config["max_context_blocks"] = int(stability_conf.get("max_context_blocks", config["max_context_blocks"]))
             config["pause_seconds"] = int(stability_conf.get("pause_seconds", config["pause_seconds"]))
@@ -94,6 +96,7 @@ def load_test_config() -> Dict[str, Any]:
 
         config["threads"] = max(1, min(config["threads"], server_max))
         config["repeat"] = max(2, config["repeat"])
+        config["timeout"] = max(1, config["timeout"])
         config["n_results"] = max(1, min(config["n_results"], 25))
         config["max_context_blocks"] = max(1, min(config["max_context_blocks"], 25))
         config["pause_seconds"] = max(0, config["pause_seconds"])
@@ -353,7 +356,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--limit", type=int, default=None, help="Mitu dataset'i esimest testlugu kaivitada.")
     parser.add_argument("--model", default=DEFAULT_MODEL, help="Pohiparingu mudel.")
     parser.add_argument("--threads", type=int, default=test_config["threads"], help="Mudeli loimede arv.")
-    parser.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT, help="HTTP ja mudeli timeout sekundites.")
+    parser.add_argument("--timeout", type=int, default=test_config["timeout"], help="HTTP ja mudeli timeout sekundites.")
     parser.add_argument("--pause-seconds", type=int, default=test_config["pause_seconds"], help="Paus sekundites kahe korduse vahel.")
     parser.add_argument("--n-results", type=int, default=test_config["n_results"], help="Retrieval'i kandidaatide arv.")
     parser.add_argument(

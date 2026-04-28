@@ -191,7 +191,7 @@ Süsteemis on olemas järgmised testid, mis asuvad /testing/ kataloogis:
 * **bench-post-check.py** -- post-check test, testilood failis post_check_dataset.json
 * **retr-test.py** -- retrieval (vektorbaasi päring) test, testilood failis retrieval_dataset.json
 * **llm-test.py** -- põhipäringu test, testilood failis main_llm_dataset.json
-* **stability-test.py** -- kordab sama RAG-päringut ning kontrollib, kas retrieval'i kontekst ja selle konteksti põhjal antud põhipäringu vastus püsivad samad. Pre-check, normaliseerimine ja post-check ei ole selle testi osa. Vaikimisi küsimus, korduste arv, threadide arv, `n_results`, `max_context_blocks` ja `pause_seconds` tulevad failist `/testing/tests_conf.json`; käsurea parameetriga saab neid jooksu ajaks üle kirjutada.
+* **stability-test.py** -- kordab sama RAG-päringut ning kontrollib, kas retrieval'i kontekst ja selle konteksti põhjal antud põhipäringu vastus püsivad samad. Pre-check, normaliseerimine ja post-check ei ole selle testi osa. Vaikimisi küsimus, korduste arv, threadide arv, `timeout`, `n_results`, `max_context_blocks` ja `pause_seconds` tulevad failist `/testing/tests_conf.json`; käsurea parameetriga saab neid jooksu ajaks üle kirjutada.
 * **normalizer-test.py** -- normaliseerimise test, testilood failis normalizer_dataset.json
 * **benchmark_embeddings.py** -- testib erinevaid embeddingu mudeleid, st **NB!** koostab erinevate mudelitega vektorandmebaasid ja võrdleb neid omavahel. Veidi ajas maha jäänud. 
 
