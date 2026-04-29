@@ -154,6 +154,10 @@ def build_subsection_prefix(law_abbr, para_nr, lg_nr):
     base_prefix = f"{law_abbr} § {para_nr}"
     return f"{base_prefix} lg {lg_nr}" if str(lg_nr).strip() else base_prefix
 
+def build_point_prefix(law_abbr, para_nr, lg_nr, p_nr):
+    base_prefix = build_subsection_prefix(law_abbr, para_nr, lg_nr)
+    return f"{base_prefix} p {p_nr}" if str(p_nr).strip() else base_prefix
+
 def get_clean_text(element):
     """Võtab elemendi teksti nii, et loetelud ja sisemised eraldused jääks alles."""
     if element is None:
@@ -265,7 +269,7 @@ def parse_xml_to_legal_chunks(file_path):
                             p_nr = (p.find("{*}alampunktNr").text or "") if p.find("{*}alampunktNr") is not None else ""
                             p_content = get_clean_text(p)
                             if p_content:
-                                prefix = f"{law_abbr} § {para_nr} lg {lg_nr} p {p_nr}"
+                                prefix = build_point_prefix(law_abbr, para_nr, lg_nr, p_nr)
                                 needs_intro = len(p_content) < MIN_CONTENT_WITHOUT_INTRO
                                 should_attach_intro = intro and (len(intro) <= MAX_INTRO_CHARS or needs_intro)
                                 full_content = normalize_text(f"{intro} {p_content}") if should_attach_intro else p_content

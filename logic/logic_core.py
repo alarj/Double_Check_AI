@@ -58,6 +58,20 @@ def get_ee_time():
     """Tagastab Eesti aja logimiseks."""
     return datetime.now(ZoneInfo("Europe/Tallinn"))
 
+def _first_result_list(results, key):
+    """Tagastab Chroma query tulemuse esimese listi turvaliselt."""
+    if not isinstance(results, dict):
+        return []
+    value = results.get(key)
+    if not value:
+        return []
+    if isinstance(value, list):
+        if not value:
+            return []
+        first = value[0]
+        return first if isinstance(first, list) else []
+    return []
+
 def get_context(query, n_results=5, max_context_blocks=3, return_debug=False):
     """
     Teostab RAG-otsingu koos hübriidse skoorimisega (Vektor + Märksõnad).
@@ -69,14 +83,18 @@ def get_context(query, n_results=5, max_context_blocks=3, return_debug=False):
         fetch_k = max(int(n_results or 5), int(max_context_blocks or 3), 5) * 4
         results = collection.query(query_texts=[query], n_results=fetch_k)
         
-        if not results or not results['documents'] or not results['documents'][0]:
+        docs = _first_result_list(results, "documents")
+        if not docs:
             if return_debug:
                 return "", {"fetch_k": fetch_k, "candidates": []}
             return ""
 
-        docs = results['documents'][0]
-        metas = results.get('metadatas', [[]])[0]
-        distances = results.get('distances', [[]])[0]
+        metas = _first_result_list(results, "metadatas")
+        distances = _first_result_list(results, "distances")
+        if len(metas) < len(docs):
+            metas = metas + [{} for _ in range(len(docs) - len(metas))]
+        if len(distances) < len(docs):
+            distances = distances + [1.4 for _ in range(len(docs) - len(distances))]
         
         query_words = re.findall(r'\w+', query.lower())
         query_numbers = re.findall(r'\d[\d\s]*', query.lower())
@@ -85,6 +103,8 @@ def get_context(query, n_results=5, max_context_blocks=3, return_debug=False):
         seen_snippets = set()
         
         for i, doc in enumerate(docs):
+            if not isinstance(doc, str) or not doc.strip():
+                continue
             # Dublikaatide eemaldamine sisu alguse põhjal
             snippet = doc[:100].strip().lower()
             if snippet in seen_snippets:
