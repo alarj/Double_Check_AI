@@ -1,0 +1,18 @@
+{
+  "max_threads": 16,
+  "tests": {
+    "llm-test": 16,
+    "stability-test": {
+      "question": "kui suur on lihthanke piirmäär",
+      "repeat": 20,
+      "threads": 4,
+      "timeout": 360,
+      "n_results": 5,
+      "max_context_blocks": 3,
+      "pause_seconds": 0
+    },
+    "bench-pre-check": 16,
+    "bench-post-check": 16,
+    "normalizer-test": 16
+  }
+}

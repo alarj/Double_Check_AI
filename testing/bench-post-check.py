@@ -16,6 +16,22 @@ MODELS_TO_TEST = ["gemma2:2b", "mistral", "llama3:8b", "phi3"]
 
 DATASET_FILE = "/testing/post_check_dataset.json"
 LOG_FILE = "/testing/bench-post-check-log.json"
+TESTS_CONF_FILE = os.getenv("TESTS_CONF_FILE", "/testing/tests_conf.json")
+
+
+def load_test_threads(test_name: str) -> int:
+    server_max = os.cpu_count() or 1
+    configured = 4
+    try:
+        with open(TESTS_CONF_FILE, "r", encoding="utf-8-sig") as f:
+            conf = json.load(f)
+        configured = int(conf.get("tests", {}).get(test_name, conf.get("max_threads", configured)))
+    except Exception:
+        configured = 4
+    return max(1, min(configured, server_max))
+
+
+TEST_THREADS = load_test_threads("bench-post-check")
 
 
 def ee_now_str() -> str:
@@ -79,7 +95,7 @@ def run_benchmark() -> None:
                 "ai_response": ai_response,
                 "model": model,
                 "timeout": 360,
-                "threads": 4,
+                "threads": TEST_THREADS,
             }
 
             start_time = time.time()

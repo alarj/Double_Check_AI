@@ -168,7 +168,7 @@ Kasutamine:
 export GEMINI_API_KEY="<sinu_gemini_api_voti>"
 ```
 2. UI-s vali normaliseerimismudeliks näiteks:
-* `gemini:gemini-2.0-flash`
+* `gemini:gemini-2.5-flash`
 
 Vorming:
 * Kui mudelinimi algab `gemini:`, kasutab API Google Gemini teenust.
@@ -178,7 +178,7 @@ Näidis `/normalize` request:
 ```json
 {
   "user_input": "kui suur on lihthanke piirmäär",
-  "model": "gemini:gemini-2.0-flash",
+  "model": "gemini:gemini-2.5-flash",
   "timeout": 90,
   "threads": 4
 }
@@ -191,6 +191,7 @@ Süsteemis on olemas järgmised testid, mis asuvad /testing/ kataloogis:
 * **bench-post-check.py** -- post-check test, testilood failis post_check_dataset.json
 * **retr-test.py** -- retrieval (vektorbaasi päring) test, testilood failis retrieval_dataset.json
 * **llm-test.py** -- põhipäringu test, testilood failis main_llm_dataset.json
+* **stability-test.py** -- kordab sama RAG-päringut ning kontrollib, kas retrieval'i kontekst ja selle konteksti põhjal antud põhipäringu vastus püsivad samad. Pre-check, normaliseerimine ja post-check ei ole selle testi osa. Vaikimisi küsimus, korduste arv, threadide arv, `timeout`, `n_results`, `max_context_blocks` ja `pause_seconds` tulevad failist `/testing/tests_conf.json`; käsurea parameetriga saab neid jooksu ajaks üle kirjutada.
 * **normalizer-test.py** -- normaliseerimise test, testilood failis normalizer_dataset.json
 * **benchmark_embeddings.py** -- testib erinevaid embeddingu mudeleid, st **NB!** koostab erinevate mudelitega vektorandmebaasid ja võrdleb neid omavahel. Veidi ajas maha jäänud. 
 
@@ -202,6 +203,12 @@ Kõik testid koostavad ka logi nii ekraanile kui .json formaadis sinnasamasse /t
 docker exec -it test-app python /testing/testifaili_nimi.py
 ```
 (testifaili_nimi.py asemele tuleb siis kirjutada õige faili nimi vastavalt eespool olevale infole)
+
+Stabiilsuse testi näited:
+```bash
+docker exec -it test-app python /testing/stability-test.py --case-index 1 --repeat 100
+docker exec -it test-app python /testing/stability-test.py --question "kes kinnitab hanke tulemuse?" --repeat 1000
+```
 
  
 

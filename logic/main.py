@@ -1,4 +1,4 @@
-﻿import base64
+import base64
 import json
 import os
 import subprocess
@@ -25,7 +25,7 @@ total_cores = os.cpu_count() or 1
 
 
 def log_json_event(data):
-    """Kirjutab sĆ¼ndmuse logifaili JSON formaadis."""
+    """Kirjutab sündmuse logifaili JSON formaadis."""
     try:
         with open(LOG_FILE, "a", encoding="utf-8") as f:
             f.write(json.dumps(data, ensure_ascii=False) + "\n")
@@ -54,7 +54,7 @@ def append_prompt_change_log(old_prompts, new_prompts):
         with open(PROMPTS_CHANGE_LOG_FILE, "w", encoding="utf-8") as f:
             json.dump(existing, f, indent=2, ensure_ascii=False)
     except Exception as e:
-        st.error(f"Prompti muutuse logimine ebaĆµnnestus: {e}")
+        st.error(f"Prompti muutuse logimine ebaõnnestus: {e}")
 
 
 def fetch_logs_via_api(source, limit=50):
@@ -71,13 +71,14 @@ def fetch_logs_via_api(source, limit=50):
         return [], str(e)
 
 
-def fetch_retrieval_context_via_api(query_text, n_results=5):
+def fetch_retrieval_context_via_api(query_text, n_results=5, max_context_blocks=3):
     """Toob RAG konteksti REST API /retrieval endpointist."""
     try:
         auth_token = base64.b64encode(f"{API_USER}:{API_PASSWORD}".encode("utf-8")).decode("utf-8")
         payload = json.dumps({
             "query": query_text,
             "n_results": n_results,
+            "max_context_blocks": max_context_blocks,
         }).encode("utf-8")
         req = urllib.request.Request(
             f"{API_BASE_URL}/retrieval",
@@ -123,7 +124,7 @@ def fetch_precheck_via_api(user_input, model, normalization_mode, threads, timeo
 
 
 def fetch_normalized_query_via_api(user_input, model, threads, timeout, gemini_api_key=""):
-    """Toob normaliseeritud pÄ†Ā¤ringu REST API /normalize endpointist."""
+    """Toob normaliseeritud päringu REST API /normalize endpointist."""
     try:
         auth_token = base64.b64encode(f"{API_USER}:{API_PASSWORD}".encode("utf-8")).decode("utf-8")
         req_data = {
@@ -224,7 +225,7 @@ def detect_git_branch():
 
 
 def detect_build_time():
-    """Tagastab build aja vĆµi viimase commit'i aja."""
+    """Tagastab build aja või viimase commit'i aja."""
     build_time = os.getenv("BUILD_TIME", "").strip()
     if build_time and build_time != "teadmata":
         return build_time
@@ -321,6 +322,7 @@ def render_logs():
             "test-post-check",
             "test-llm",
             "test-retrieval",
+            "test-stability",
             "test-benchmark-embeddings",
             "test-normalizer",
             "prompts-change",
@@ -387,7 +389,7 @@ def render_response():
 # --- UI SEADISTAMINE ---
 st.set_page_config(page_title="Sinu nutikas AI assistent", layout="wide")
 
-# Session state algvĆ¤Ć¤rtustamine
+# Session state algväärtustamine
 if "processing" not in st.session_state:
     st.session_state.processing = False
 if "last_response" not in st.session_state:
@@ -421,8 +423,38 @@ with st.sidebar:
     st.subheader("Serveri sätted")
     st.caption(f"Build aeg: {build_time}")
     st.caption(f"Git haru: {build_branch}")
-    selected_threads = st.number_input("Lõimi (threads):", 1, total_cores, total_cores, disabled=is_disabled)
-    selected_timeout = st.number_input("Timeout (sek):", 30, 1200, 360, disabled=is_disabled)
+    selected_threads = st.number_input(
+        "Lõimi (threads):",
+        1,
+        total_cores,
+        total_cores,
+        disabled=is_disabled,
+        help="Mitu CPU lõime antakse mudelile vastuse arvutamiseks. Kui serveris on vähem lõimi, kasutatakse serveri tegelikku ülempiiri.",
+    )
+    selected_timeout = st.number_input(
+        "Timeout (sek):",
+        30,
+        1200,
+        360,
+        disabled=is_disabled,
+        help="Maksimaalne aeg sekundites, kui kaua üks mudeli või API samm võib vastust oodata.",
+    )
+    selected_n_results = st.number_input(
+        "Retrieval kandidaate:",
+        1,
+        25,
+        5,
+        disabled=is_disabled,
+        help="Mitu tulemust retrieval päringule baasparameetrina küsitakse. Taustal võidakse ümberreastamiseks küsida rohkem kandidaate.",
+    )
+    selected_max_context_blocks = st.number_input(
+        "Kontekstiplokke:",
+        1,
+        25,
+        3,
+        disabled=is_disabled,
+        help="Mitu parimaks hinnatud kontekstiplokki antakse lõpuks põhimudelile vastuse koostamiseks.",
+    )
 
     st.divider()
     st.subheader("Mudelid")
@@ -633,7 +665,11 @@ if st.session_state.processing and st.session_state.current_query:
         if is_safe:
             update_ui(f"\U0001F4DA Samm 2/4: Otsin konteksti | päring: {active_query}")
             ctx_start = time.time()
-            fetched_context, retrieval_data, retrieval_error = fetch_retrieval_context_via_api(active_query)
+            fetched_context, retrieval_data, retrieval_error = fetch_retrieval_context_via_api(
+                active_query,
+                n_results=selected_n_results,
+                max_context_blocks=selected_max_context_blocks,
+            )
             if retrieval_error:
                 raise RuntimeError(f"Retrieval API viga: {retrieval_error}")
             context_found = len(fetched_context.strip()) > 0
@@ -683,7 +719,7 @@ if st.session_state.processing and st.session_state.current_query:
                     post_res = logic_core.ask_ollama(post_check_model_input, post_p, selected_threads, selected_timeout)
                     post_data = logic_core.parse_json_res(post_res)
                     p_status = post_data.get("status", "ALLOWED")
-                    post_analysis = post_data.get("analysis", post_res)
+                    post_analysis = post_data.get("analysis", post_data.get("reason", post_res))
                     post_duration = round(time.time() - step_start_post, 2)
                     update_ui(f"\u2705 Samm 4/4 valmis ({post_duration} sek)")
 
@@ -696,7 +732,6 @@ if st.session_state.processing and st.session_state.current_query:
                         "analysis": post_analysis,
                         "raw_response": post_res,
                     }
-
                     if p_status == "BLOCKED":
                         is_safe = False
                         main_answer = "**Vastus blokeeriti järelkontrolli poolt.**"
