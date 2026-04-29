@@ -130,12 +130,29 @@ def get_paragraph_title(para):
     title_elem = para.find("{*}paragrahvPealkiri") or para.find("{*}pealkiri")
     return extract_text_with_spacing(title_elem)
 
+SUPERSCRIPT_MAP = str.maketrans("0123456789", "⁰¹²³⁴⁵⁶⁷⁸⁹")
+
+def get_paragraph_number(para):
+    para_nr_elem = para.find("{*}paragrahvNr")
+    if para_nr_elem is None:
+        return ""
+
+    base_number = (para_nr_elem.text or "").strip()
+    superscript = (para_nr_elem.get("ylaIndeks") or "").strip()
+    if superscript:
+        return f"{base_number}{superscript.translate(SUPERSCRIPT_MAP)}"
+    return base_number
+
 def build_chunk_text(doc_type, prefix, content, para_title=""):
     title_suffix = f" ({para_title})" if para_title else ""
     return smart_truncate(
         f"[{doc_type.upper()}] {prefix}{title_suffix}: {content}",
         MAX_CHUNK_CHARS
     )
+
+def build_subsection_prefix(law_abbr, para_nr, lg_nr):
+    base_prefix = f"{law_abbr} § {para_nr}"
+    return f"{base_prefix} lg {lg_nr}" if str(lg_nr).strip() else base_prefix
 
 def get_clean_text(element):
     """Võtab elemendi teksti nii, et loetelud ja sisemised eraldused jääks alles."""
@@ -183,7 +200,7 @@ def parse_xml_to_legal_chunks(file_path):
 
         # 3. Parsime paragrahvid
         for para in root.findall(".//{*}paragrahv"):
-            para_nr = (para.find("{*}paragrahvNr").text or "") if para.find("{*}paragrahvNr") is not None else ""
+            para_nr = get_paragraph_number(para)
             para_title = get_paragraph_title(para)
             
             def create_meta(display_prefix, chunk_type, lg="", p=""):
@@ -220,7 +237,7 @@ def parse_xml_to_legal_chunks(file_path):
                     if not punktid:
                         content = get_clean_text(lg)
                         if content:
-                            prefix = f"{law_abbr} § {para_nr} lg {lg_nr}"
+                            prefix = build_subsection_prefix(law_abbr, para_nr, lg_nr)
                             text = build_chunk_text(doc_type_val, prefix, content, para_title)
                             chunks.append(text)
                             metadatas.append(create_meta(prefix, "subsection", lg=lg_nr))
@@ -237,7 +254,7 @@ def parse_xml_to_legal_chunks(file_path):
                                 intro_parts.append(child_text)
                         intro = normalize_text(" ".join(intro_parts))
 
-                        lg_prefix = f"{law_abbr} § {para_nr} lg {lg_nr}"
+                        lg_prefix = build_subsection_prefix(law_abbr, para_nr, lg_nr)
                         lg_content = get_clean_text(lg)
                         if lg_content:
                             lg_text = build_chunk_text(doc_type_val, lg_prefix, lg_content, para_title)
