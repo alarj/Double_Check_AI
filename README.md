@@ -122,19 +122,23 @@ Tiimi sees jagame Chroma vektorbaasi **zipitud snapshot'ina**, mitte Git commiti
 
 1. Üks tiimiliige ehitab vektorbaasi valmis.
 2. Kaust `storage/vector_db/` pakitakse zip-faili.
-3. Zip laaditakse üles jagamiskohta:
-   * GitHub Release asset
-   * Google Drive
-   * OneDrive
-   * S3 / MinIO
-4. Repos hoitakse ainult juhendit:
-   * kust snapshot võtta
-   * kuhu see lahti pakkida
-   * millise andmestiku ja mudeliga see kokku käib
+3. Zip laaditakse üles **GitHub Release assetina**.
+4. Teised tiimiliikmed tõmbavad selle serverisse `wget` abil.
+5. Vana vektorbaas kustutatakse enne taastamist ära.
+6. Zip pakitakse lahti kausta `storage/`.
+7. Teenused taaskäivitatakse.
 
 ### Snapshot'i loomine serveris
 
-Näide:
+#### 1. Veendu, et vektorbaas on valmis
+
+Kontrollnäide:
+```bash
+docker exec -it logic-app python -c "import chromadb; client = chromadb.PersistentClient(path='/app/storage/vector_db'); c = client.get_collection('procurements'); print('count:', c.count())"
+```
+
+#### 2. Paki `storage/vector_db/` zip-failiks
+
 ```bash
 cd ~/Double_Check_AI/storage
 zip -r vector_db_rhs_vos_bge-m3_2026-04-29.zip vector_db
@@ -150,33 +154,97 @@ Näiteks:
 vector_db_rhs_vos_bge-m3_2026-04-29.zip
 ```
 
-### Mida snapshot'i juurde dokumenteerida
+#### 3. Laadi zip GitHub Release'i üles
 
-Snapshot'i kirjelduses või eraldi märkmes peaks olema vähemalt:
-* sisaldab: `RHS`, `VÕS`
-* embedding-mudel: `bge-m3`
-* loomise kuupäev
-* kasutatud ingest skript: `data_pipeline/ingest_laws.py`
+Kasuta olemasolevat release'i või tee uus release. GitHubi veebis:
+1. Ava repo `Releases`
+2. Vali `Draft a new release` või ava olemasolev release
+3. Lisa asset:
+   * `vector_db_rhs_vos_bge-m3_2026-04-29.zip`
+4. Lisa kirjeldusse vähemalt:
+   * sisaldab: `RHS`, `VÕS`
+   * embedding-mudel: `bge-m3`
+   * loomise kuupäev
+   * kasutatud ingest skript: `data_pipeline/ingest_laws.py`
 
-### Snapshot'i taastamine teises masinas
+### Snapshot'i taastamine teises serveris
 
-1. Peata konteinerid või vähemalt rakendus, mis kasutab vektorbaasi.
-2. Kustuta olemasolev `storage/vector_db/` sisu, jättes soovi korral `.gitkeep` alles.
-3. Paki snapshot lahti kausta `storage/`.
+#### 1. Mine projekti `storage/` kausta
 
-Näide:
 ```bash
 cd ~/Double_Check_AI/storage
-rm -rf vector_db/*
+```
+
+#### 2. Kustuta vana vektorbaas
+
+Jäta soovi korral `.gitkeep` alles:
+```bash
+find vector_db -mindepth 1 ! -name '.gitkeep' -exec rm -rf {} +
+```
+
+Pärast kontroll:
+```bash
+ls -la ~/Double_Check_AI/storage/vector_db
+```
+
+#### 3. Tõmba uus zip GitHub Release'ist serverisse
+
+Kopeeri GitHub Release asseti otselink ja kasuta `wget`-i:
+
+```bash
+wget "GITHUB_RELEASE_ASSET_URL" -O vector_db_rhs_vos_bge-m3_2026-04-29.zip
+```
+
+Näiteks:
+```bash
+wget "https://github.com/alarj/Double_Check_AI/releases/download/v3.0/vector_db_rhs_vos_bge-m3_2026-04-29.zip" -O vector_db_rhs_vos_bge-m3_2026-04-29.zip
+```
+
+#### 4. Paki zip lahti
+
+```bash
 unzip vector_db_rhs_vos_bge-m3_2026-04-29.zip
 ```
 
-Kui zip sisaldab otse kausta `vector_db/`, siis taastub õige struktuur automaatselt.
+Kui zip sisaldab sees kausta `vector_db/`, siis taastub õige struktuur automaatselt.
 
-Pärast taastamist käivita või taaskäivita rakendus:
+#### 5. Kontrolli, et failid on olemas
+
 ```bash
+ls -la ~/Double_Check_AI/storage/vector_db
+```
+
+Oodatav tulemus:
+* `chroma.sqlite3`
+* vähemalt üks UUID-nimeline alamkaust
+* võimalik `.gitkeep`
+
+#### 6. Taaskäivita teenused
+
+```bash
+cd ~/Double_Check_AI
 docker compose restart api logic-app
 ```
+
+#### 7. Kontrolli, et vektorbaas on loetav
+
+```bash
+docker exec -it logic-app python -c "import chromadb; client = chromadb.PersistentClient(path='/app/storage/vector_db'); c = client.get_collection('procurements'); print('count:', c.count())"
+```
+
+### Kas algfaile on vaja?
+
+Süsteemi tavapäraseks tööks **ei ole** seaduste algfaile vaja, kui valmis vektorbaasi snapshot on juba taastatud kausta `storage/vector_db/`.
+
+See tähendab:
+* retrieval ja vastamine töötavad ainult vektorbaasi põhjal
+* `storage/raw/laws/` algfaile ei ole vaja lihtsalt süsteemi kasutamiseks
+
+Algfaile on vaja ainult siis, kui soovid:
+* vektorbaasi uuesti nullist ehitada
+* lisada uusi seadusfaile
+* muuta ingest loogikat ja andmed uuesti sisse lugeda
+* kontrollida, millest konkreetne chunk tekkis
 
 ### Millal snapshot uuendada
 
@@ -186,7 +254,7 @@ Tee uus snapshot siis, kui:
 * vahetatakse embedding-mudelit
 * tehakse täielik vektorbaasi rebuild
 
-Kui snapshot muutub, uuenda ka selle nimi ja kirjeldus, et tiim teaks, milline versioon on kasutusel.
+Kui snapshot muutub, uuenda ka selle nimi ja GitHub Release'i kirjeldus, et tiim teaks, milline versioon on kasutusel.
 
 ## Tehnoloogiad
 * **Streamlit** - Veebiliides.

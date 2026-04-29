@@ -72,7 +72,31 @@ def _first_result_list(results, key):
         return first if isinstance(first, list) else []
     return []
 
-def get_context(query, n_results=5, max_context_blocks=3, return_debug=False):
+def is_secret_metadata(meta):
+    """Demo access flag: only explicit classification_level=secret is restricted."""
+    return str((meta or {}).get("classification_level", "")).strip().lower() == "secret"
+
+def format_debug_candidates(scored_docs, selected_indexes, secret_allowed=False):
+    candidates = []
+    for i, (sc, s, d, _family_key, m) in enumerate(scored_docs):
+        is_secret = is_secret_metadata(m)
+        item = {
+            "rank": i + 1,
+            "score": round(sc, 4),
+            "source": s,
+            "selected": i in selected_indexes,
+            "metadata": m,
+            "text": d,
+            "is_secret": is_secret,
+            "filtered": False,
+        }
+        if is_secret and not secret_allowed:
+            item["filtered"] = True
+            item["filtered_reason"] = "secret_not_allowed"
+        candidates.append(item)
+    return candidates
+
+def get_context(query, n_results=5, max_context_blocks=3, return_debug=False, secret=False):
     """
     Teostab RAG-otsingu koos hübriidse skoorimisega (Vektor + Märksõnad).
     Optimeeritud bge-m3 distantsidele.
@@ -184,24 +208,20 @@ def get_context(query, n_results=5, max_context_blocks=3, return_debug=False):
 
         # Sorteerime tulemused lõpliku hübriidse skoori järgi
         scored_docs.sort(key=lambda x: x[0], reverse=True)
+        secret_allowed = bool(secret)
+        selectable_docs = [
+            item for item in scored_docs
+            if secret_allowed or not is_secret_metadata(item[4])
+        ]
 
         # FAIL FAST lävend: bge-m3 puhul on 0.65-0.7 turvaline piir
         # See hoiab ära hallutsinatsioonid tühja konteksti baasilt
-        if not scored_docs or scored_docs[0][0] < 0.65:
+        if not selectable_docs or selectable_docs[0][0] < 0.65:
             if return_debug:
                 return "", {
                     "fetch_k": fetch_k,
-                    "candidates": [
-                        {
-                            "rank": i + 1,
-                            "score": round(sc, 4),
-                            "source": s,
-                            "selected": False,
-                            "metadata": m,
-                            "text": d,
-                        }
-                        for i, (sc, s, d, _family_key, m) in enumerate(scored_docs)
-                    ],
+                    "secret": secret_allowed,
+                    "candidates": format_debug_candidates(scored_docs, set(), secret_allowed),
                 }
             return ""
 
@@ -210,6 +230,8 @@ def get_context(query, n_results=5, max_context_blocks=3, return_debug=False):
         selected_indexes = set()
         limit = max(1, int(max_context_blocks or 3))
         for selected_index, (sc, s, d, family_key, meta) in enumerate(scored_docs):
+            if not secret_allowed and is_secret_metadata(meta):
+                continue
             if family_key in seen_families:
                 continue
             seen_families.add(family_key)
@@ -222,17 +244,8 @@ def get_context(query, n_results=5, max_context_blocks=3, return_debug=False):
         if return_debug:
             return context, {
                 "fetch_k": fetch_k,
-                "candidates": [
-                    {
-                        "rank": i + 1,
-                        "score": round(sc, 4),
-                        "source": s,
-                        "selected": i in selected_indexes,
-                        "metadata": m,
-                        "text": d,
-                    }
-                    for i, (sc, s, d, family_key, m) in enumerate(scored_docs)
-                ],
+                "secret": secret_allowed,
+                "candidates": format_debug_candidates(scored_docs, selected_indexes, secret_allowed),
             }
         return context
         

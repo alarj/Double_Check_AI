@@ -9,6 +9,7 @@ from chromadb.utils import embedding_functions
 
 # --- KONFIGURATSIOON ---
 LAWS_DIR = "/app/storage/raw/laws/"
+SECRET_LAWS_DIR = "/app/storage/raw/secret_laws/"
 DB_PATH = "/app/storage/vector_db"
 INGEST_LOG_FILE = "/app/storage/ingest.log"
 OLLAMA_URL = "http://ollama:11434"
@@ -282,54 +283,94 @@ def parse_xml_to_legal_chunks(file_path):
         print(f"Viga {file_path} parsimisel: {e}")
         return [], [], "tundmatu"
 
+def get_law_sources():
+    return [
+        {
+            "dir": LAWS_DIR,
+            "label": "public_laws",
+            "classification_level": "",
+        },
+        {
+            "dir": SECRET_LAWS_DIR,
+            "label": "secret_laws",
+            "classification_level": "secret",
+        },
+    ]
+
+def apply_source_metadata(metadatas, source_label, classification_level=""):
+    for meta in metadatas:
+        meta["source_collection"] = source_label
+        if classification_level:
+            meta["classification_level"] = classification_level
+    return metadatas
+
 def run_ingest():
     start_time = datetime.now()
     print(f"\n🚀 PRODUCTION-READY INGEST | Mudel: {EMBED_MODEL}")
-    
-    if not os.path.exists(LAWS_DIR):
-        print(f"❌ VIGA: Kataloogi {LAWS_DIR} ei eksisteeri!")
+
+    law_sources = []
+    files_found = 0
+    for source in get_law_sources():
+        source_dir = source["dir"]
+        if not os.path.exists(source_dir):
+            print(f"⚠️ Kataloogi {source_dir} ei eksisteeri, jätan vahele.")
+            continue
+        files = sorted([f for f in os.listdir(source_dir) if f.lower().endswith(".akt")])
+        files_found += len(files)
+        law_sources.append((source, files))
+
+    if not law_sources:
+        print("❌ VIGA: Ühtegi seaduste kataloogi ei leitud.")
         return
 
-    files = [f for f in os.listdir(LAWS_DIR) if f.lower().endswith(".akt")]
-    log_ingest_event("SYSTEM", "IMPORT_STARTED", {"files_found": len(files)})
+    log_ingest_event("SYSTEM", "IMPORT_STARTED", {"files_found": files_found})
     
     total_new_chunks = 0
     skipped_files = 0
     type_counts = {}
 
-    for filename in files:
-        # Kontrollime, kas fail on juba imporditud
-        existing = collection.get(where={"file": filename}, limit=1)
-        if existing and existing['ids']:
-            print(f"⏩ {filename} on juba olemas.")
-            skipped_files += 1
-            continue
+    for source, files in law_sources:
+        source_dir = source["dir"]
+        source_label = source["label"]
+        classification_level = source["classification_level"]
 
-        path = os.path.join(LAWS_DIR, filename)
-        chunks, metas, doc_type = parse_xml_to_legal_chunks(path)
-        
-        if chunks:
-            print(f"📥 [{doc_type.upper()}] {filename} ({len(chunks)} osa)...", end=" ", flush=True)
-            # Kasutame väiksemat batchi kindluse mõttes
-            batch_size = 10
-            for i in range(0, len(chunks), batch_size):
-                end = i + batch_size
-                collection.add(
-                    documents=chunks[i:end],
-                    ids=[f"id-{uuid.uuid4()}" for _ in chunks[i:end]],
-                    metadatas=metas[i:end]
-                )
-            total_new_chunks += len(chunks)
-            type_counts[doc_type] = type_counts.get(doc_type, 0) + 1
-            
-            # Logime faili eduka impordi
-            log_ingest_event(doc_type, "FILE_IMPORTED", {
-                "file": filename, 
-                "chunks": len(chunks)
-            })
-            print(f"✅")
-        else:
-            print(f"⚠️ Failis {filename} puudus sisu.")
+        for filename in files:
+            # Kontrollime, kas fail on juba imporditud
+            existing = collection.get(where={"file": filename}, limit=1)
+            if existing and existing['ids']:
+                print(f"⏩ {filename} on juba olemas.")
+                skipped_files += 1
+                continue
+
+            path = os.path.join(source_dir, filename)
+            chunks, metas, doc_type = parse_xml_to_legal_chunks(path)
+            metas = apply_source_metadata(metas, source_label, classification_level)
+
+            if chunks:
+                class_note = f", classification={classification_level}" if classification_level else ""
+                print(f"📥 [{doc_type.upper()}] {filename} ({len(chunks)} osa{class_note})...", end=" ", flush=True)
+                # Kasutame väiksemat batchi kindluse mõttes
+                batch_size = 10
+                for i in range(0, len(chunks), batch_size):
+                    end = i + batch_size
+                    collection.add(
+                        documents=chunks[i:end],
+                        ids=[f"id-{uuid.uuid4()}" for _ in chunks[i:end]],
+                        metadatas=metas[i:end]
+                    )
+                total_new_chunks += len(chunks)
+                type_counts[doc_type] = type_counts.get(doc_type, 0) + 1
+
+                # Logime faili eduka impordi
+                log_ingest_event(doc_type, "FILE_IMPORTED", {
+                    "file": filename,
+                    "chunks": len(chunks),
+                    "source_collection": source_label,
+                    "classification_level": classification_level,
+                })
+                print(f"✅")
+            else:
+                print(f"⚠️ Failis {filename} puudus sisu.")
 
     duration = round((datetime.now() - start_time).total_seconds(), 2)
     log_ingest_event("SYSTEM", "IMPORT_FINISHED", {

@@ -71,7 +71,7 @@ def fetch_logs_via_api(source, limit=50):
         return [], str(e)
 
 
-def fetch_retrieval_context_via_api(query_text, n_results=5, max_context_blocks=3):
+def fetch_retrieval_context_via_api(query_text, n_results=5, max_context_blocks=3, secret=False):
     """Toob RAG konteksti REST API /retrieval endpointist."""
     try:
         auth_token = base64.b64encode(f"{API_USER}:{API_PASSWORD}".encode("utf-8")).decode("utf-8")
@@ -79,6 +79,7 @@ def fetch_retrieval_context_via_api(query_text, n_results=5, max_context_blocks=
             "query": query_text,
             "n_results": n_results,
             "max_context_blocks": max_context_blocks,
+            "secret": bool(secret),
         }).encode("utf-8")
         req = urllib.request.Request(
             f"{API_BASE_URL}/retrieval",
@@ -404,6 +405,8 @@ if "edit_prompts" not in st.session_state:
     st.session_state.edit_prompts = False
 if "current_query" not in st.session_state:
     st.session_state.current_query = None
+if "current_secret" not in st.session_state:
+    st.session_state.current_secret = False
 if "log_source" not in st.session_state:
     st.session_state.log_source = "ui"
 if "status_messages" not in st.session_state:
@@ -548,6 +551,12 @@ with st.form(key="query_form", clear_on_submit=False):
         disabled=st.session_state.processing,
         key="query_input",
     )
+    secret_input = st.checkbox(
+        "Luba salajane info",
+        value=st.session_state.current_secret,
+        disabled=st.session_state.processing,
+        key="secret_input",
+    )
     submit_button = st.form_submit_button("Saada päring", disabled=st.session_state.processing)
 
 status_section = st.container()
@@ -563,6 +572,7 @@ with response_section:
 if submit_button and user_input:
     st.session_state.processing = True
     st.session_state.current_query = user_input
+    st.session_state.current_secret = bool(secret_input)
     st.session_state.status_messages = []
     st.session_state.last_elapsed_sec = 0.0
     st.session_state.last_response = None
@@ -573,6 +583,7 @@ if submit_button and user_input:
 # --- TÖÖTLUSLOOGIKA ---
 if st.session_state.processing and st.session_state.current_query:
     u_input = st.session_state.current_query
+    secret_allowed = bool(st.session_state.current_secret)
     start_time_total = time.time()
     # Tühjendame eelmise päringu nähtava väljundi kohe uue töötluse alguses.
     status_placeholder.empty()
@@ -581,6 +592,7 @@ if st.session_state.processing and st.session_state.current_query:
     log_data = {
         "timestamp": logic_core.get_ee_time().strftime("%Y-%m-%d %H:%M:%S"),
         "user_input": u_input,
+        "secret": secret_allowed,
         "security_level": security_option,
         "steps": {},
         "final_status": "PENDING",
@@ -669,6 +681,7 @@ if st.session_state.processing and st.session_state.current_query:
                 active_query,
                 n_results=selected_n_results,
                 max_context_blocks=selected_max_context_blocks,
+                secret=secret_allowed,
             )
             if retrieval_error:
                 raise RuntimeError(f"Retrieval API viga: {retrieval_error}")
@@ -678,6 +691,7 @@ if st.session_state.processing and st.session_state.current_query:
 
             log_data["steps"]["context_fetch"] = {
                 "found": context_found,
+                "secret": secret_allowed,
                 "duration": ctx_duration,
                 "api_response": retrieval_data or {},
             }

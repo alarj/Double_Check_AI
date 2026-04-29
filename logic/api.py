@@ -75,6 +75,7 @@ class RetrievalRequest(BaseModel):
     query: str = Field(..., min_length=1)
     n_results: Optional[int] = Field(5, ge=1, le=25)
     max_context_blocks: Optional[int] = Field(3, ge=1, le=25)
+    secret: Optional[bool] = False
 
 class PostCheckRequest(BaseModel):
     ai_response: str
@@ -339,11 +340,13 @@ async def run_retrieval(req: RetrievalRequest, user: str = Depends(authenticate)
     try:
         n_results = req.n_results or 5
         max_context_blocks = req.max_context_blocks or 3
+        secret = bool(req.secret)
         context, retrieval_debug = logic_core.get_context(
             req.query,
             n_results=n_results,
             max_context_blocks=max_context_blocks,
             return_debug=True,
+            secret=secret,
         )
         duration = time.time() - start_time
         blocks = [f"--- ALLIKAS:{block}" for block in context.split("--- ALLIKAS:") if block.strip()]
@@ -352,6 +355,7 @@ async def run_retrieval(req: RetrievalRequest, user: str = Depends(authenticate)
             "query": req.query,
             "n_results": n_results,
             "max_context_blocks": max_context_blocks,
+            "secret": secret,
             "start_time": start_time_str,
             "found": bool(context.strip()),
             "context": context,
@@ -360,6 +364,14 @@ async def run_retrieval(req: RetrievalRequest, user: str = Depends(authenticate)
             "retrieval_debug": {
                 "fetch_k": retrieval_debug.get("fetch_k"),
                 "candidate_count": len(retrieval_debug.get("candidates", [])),
+                "secret_candidate_count": len([
+                    c for c in retrieval_debug.get("candidates", [])
+                    if c.get("is_secret")
+                ]),
+                "filtered_secret_count": len([
+                    c for c in retrieval_debug.get("candidates", [])
+                    if c.get("filtered_reason") == "secret_not_allowed"
+                ]),
             },
             "raw_context_preview": (context[:200] + "...") if context else "PUUDUB",
             "duration": round(duration * 1000, 2),
