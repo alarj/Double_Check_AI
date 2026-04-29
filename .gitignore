@@ -22,7 +22,8 @@ storage/**
 !storage/raw/laws/
 !storage/raw/laws/**
 !storage/vector_db/
-!storage/vector_db/**
+storage/vector_db/**
+!storage/vector_db/.gitkeep
 storage/vector_db_bench*/
 storage/vector_db_bench*/**
 # Ignoreeri venv kataloogi

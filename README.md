@@ -85,7 +85,7 @@ See projekt demonstreerib mitmeastmelist AI turvakihti (Guardrail), mis kasutab 
 ## Andmete ettevalmistus (RAG)
 
 Süsteem kasutab RAG-loogikat (Retrieval-Augmented Generation). Enne rakenduse kasutamist tuleb andmed vektorbaasi laadida. 
-**NB!! Hetkel on andmed gitis olemas, seega pole neid igal serveri uuendamisel vaja lisada.**
+**NB! Vektorbaasi binaarfaile ei hoita enam Gitis.** Tiim kasutab jagatud snapshot'i (zip-fail), et kõik testiksid sama andmestikuga.
 Andmeid saab sisse logeda algandmetest, kui seda on vaja teha, siis tee nii:
 
 ### Eeltingimused
@@ -113,6 +113,80 @@ Andmeid saab sisse logeda algandmetest, kui seda on vaja teha, siis tee nii:
     cd data_pipeline
     python3 scrape_guidelines.py
     ``` 
+
+## Vektorbaasi jagamine tiimiga
+
+Tiimi sees jagame Chroma vektorbaasi **zipitud snapshot'ina**, mitte Git commitite kaudu. See väldib suuri binaarfaile repo ajaloos ja tagab, et kõik töötavad sama andmestiku peal.
+
+### Soovitatud töövoog
+
+1. Üks tiimiliige ehitab vektorbaasi valmis.
+2. Kaust `storage/vector_db/` pakitakse zip-faili.
+3. Zip laaditakse üles jagamiskohta:
+   * GitHub Release asset
+   * Google Drive
+   * OneDrive
+   * S3 / MinIO
+4. Repos hoitakse ainult juhendit:
+   * kust snapshot võtta
+   * kuhu see lahti pakkida
+   * millise andmestiku ja mudeliga see kokku käib
+
+### Snapshot'i loomine serveris
+
+Näide:
+```bash
+cd ~/Double_Check_AI/storage
+zip -r vector_db_rhs_vos_bge-m3_2026-04-29.zip vector_db
+```
+
+Soovituslik nimetus:
+```text
+vector_db_<andmestik>_<embedding-mudel>_<kuupäev>.zip
+```
+
+Näiteks:
+```text
+vector_db_rhs_vos_bge-m3_2026-04-29.zip
+```
+
+### Mida snapshot'i juurde dokumenteerida
+
+Snapshot'i kirjelduses või eraldi märkmes peaks olema vähemalt:
+* sisaldab: `RHS`, `VÕS`
+* embedding-mudel: `bge-m3`
+* loomise kuupäev
+* kasutatud ingest skript: `data_pipeline/ingest_laws.py`
+
+### Snapshot'i taastamine teises masinas
+
+1. Peata konteinerid või vähemalt rakendus, mis kasutab vektorbaasi.
+2. Kustuta olemasolev `storage/vector_db/` sisu, jättes soovi korral `.gitkeep` alles.
+3. Paki snapshot lahti kausta `storage/`.
+
+Näide:
+```bash
+cd ~/Double_Check_AI/storage
+rm -rf vector_db/*
+unzip vector_db_rhs_vos_bge-m3_2026-04-29.zip
+```
+
+Kui zip sisaldab otse kausta `vector_db/`, siis taastub õige struktuur automaatselt.
+
+Pärast taastamist käivita või taaskäivita rakendus:
+```bash
+docker compose restart api logic-app
+```
+
+### Millal snapshot uuendada
+
+Tee uus snapshot siis, kui:
+* lisatakse uus seadusfail
+* muudetakse ingest loogikat
+* vahetatakse embedding-mudelit
+* tehakse täielik vektorbaasi rebuild
+
+Kui snapshot muutub, uuenda ka selle nimi ja kirjeldus, et tiim teaks, milline versioon on kasutusel.
 
 ## Tehnoloogiad
 * **Streamlit** - Veebiliides.
