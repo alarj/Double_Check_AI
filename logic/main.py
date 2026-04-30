@@ -89,8 +89,8 @@ def fetch_logs_via_api(source, limit=50):
 def fetch_retrieval_context_via_api(
     query_text,
     original_query=None,
-    n_results=5,
-    max_context_blocks=3,
+    n_results=9,
+    max_context_blocks=5,
     secret=False,
     allowed_subject_ids=None,
     allowed_tenant_ids=None,
@@ -499,7 +499,7 @@ with st.sidebar:
         "Retrieval kandidaate:",
         1,
         25,
-        5,
+        9,
         disabled=is_disabled,
         help="Mitu tulemust retrieval päringule baasparameetrina küsitakse. Taustal võidakse ümberreastamiseks küsida rohkem kandidaate.",
     )
@@ -507,7 +507,7 @@ with st.sidebar:
         "Kontekstiplokke:",
         1,
         25,
-        3,
+        5,
         disabled=is_disabled,
         help="Mitu parimaks hinnatud kontekstiplokki antakse lõpuks põhimudelile vastuse koostamiseks.",
     )
@@ -594,13 +594,13 @@ with st.sidebar:
 
 # --- PEALEHT ---
 st.title("\U0001F680 Sinu nutikas AI assistent")
-st.caption("Süsteem kasutab bge-m3 embeddinguid ja struktuurset riigihangete andmebaasi.")
+st.caption("Süsteem kasutab bge-m3 embeddinguid ja struktuurset dokumendiandmebaasi.")
 
 # --- PÄRINGU VORM ---
 with st.form(key="query_form", clear_on_submit=False):
     user_input = st.text_input(
-        "Sisesta oma küsimus riigihangete kohta:",
-        placeholder="nt: mis on riigihange?",
+        "Sisesta oma küsimus dokumentide kohta:",
+        placeholder="nt: milline on lihthanke piirmäär või Puhh dö Caru lepingu töö sisu?",
         disabled=st.session_state.processing,
         key="query_input",
     )

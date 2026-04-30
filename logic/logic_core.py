@@ -2,6 +2,7 @@ import os
 import requests
 import json
 import re
+import unicodedata
 from datetime import datetime
 from zoneinfo import ZoneInfo
 import chromadb
@@ -141,35 +142,86 @@ def _normal_id_set(values):
     return {str(value).strip() for value in values if str(value).strip()}
 
 def is_contract_metadata(meta):
-    return str((meta or {}).get("doc_type", "")).strip().lower() == "contract"
+    meta = meta or {}
+    return (
+        str(meta.get("doc_type", "")).strip().lower() == "contract"
+        or str(meta.get("type", "")).strip().lower() == "leping"
+        or str(meta.get("chunk_type", "")).strip().lower() == "contract_section"
+    )
+
+def _canonical_text(value):
+    text = str(value or "").lower()
+    text = unicodedata.normalize("NFKD", text)
+    return "".join(ch for ch in text if not unicodedata.combining(ch))
 
 def _text_words(value):
     return {
         word
-        for word in re.findall(r"\w+", str(value or "").lower())
+        for word in re.findall(r"\w+", _canonical_text(value))
         if len(word) > 1
     }
 
 def _mentioned_contract_ids(query, metas):
-    query_l = str(query or "").lower()
+    query_l = _canonical_text(query)
     query_words_set = _text_words(query_l)
     mentioned = set()
     for meta in metas:
         if not is_contract_metadata(meta):
             continue
         contract_id = str(meta.get("contract_id", "")).strip()
-        if contract_id and contract_id.lower() in query_l:
+        if contract_id and _canonical_text(contract_id) in query_l:
+            mentioned.add(contract_id)
+            continue
+
+        subject_id = str(meta.get("subject_id", "")).strip()
+        counterparty_id = str(meta.get("counterparty_id", "")).strip()
+        if contract_id and any(identifier and identifier in query_l for identifier in (subject_id, counterparty_id)):
             mentioned.add(contract_id)
             continue
 
         subject_name = str(meta.get("subject_name", "")).strip()
-        subject_words = _text_words(subject_name)
-        if contract_id and subject_words and subject_words.issubset(query_words_set):
+        subject_words = {word for word in _text_words(subject_name) if len(word) > 2}
+        overlap = subject_words & query_words_set
+        if (
+            contract_id
+            and subject_words
+            and (
+                subject_words.issubset(query_words_set)
+                or len(overlap) >= min(2, len(subject_words))
+            )
+        ):
             mentioned.add(contract_id)
     return mentioned
 
+def _contract_catalog_metas():
+    """Loeb lepingute metadata, et nimepĆµhine tuvastus ei sĆµltuks vektorotsingu esimestest tabamustest."""
+    try:
+        results = collection.get(
+            where={"doc_type": "contract"},
+            include=["metadatas"],
+        )
+    except Exception:
+        results = {}
+
+    metas = results.get("metadatas") or []
+    if isinstance(metas, list) and metas:
+        return [meta for meta in metas if isinstance(meta, dict) and is_contract_metadata(meta)]
+
+    try:
+        results = collection.get(include=["metadatas"], limit=5000)
+    except TypeError:
+        results = collection.get(include=["metadatas"])
+    except Exception:
+        return []
+
+    metas = results.get("metadatas") or []
+    if not isinstance(metas, list):
+        return []
+    return [meta for meta in metas if isinstance(meta, dict) and is_contract_metadata(meta)]
+
 def _contract_section_intent_boost(meta, query_words):
     section_title = str((meta or {}).get("section_title", "")).lower()
+    section_title_canonical = _canonical_text(section_title)
     section_words = _text_words(section_title)
     query_word_set = set(query_words)
     query_stems = {word[:4] for word in query_word_set if len(word) >= 4}
@@ -181,6 +233,8 @@ def _contract_section_intent_boost(meta, query_words):
     if "sisu" in query_word_set and "sisu" in section_title:
         boost += 1.6
     if any(word.startswith("sisu") for word in query_word_set) and "sisu" in section_title:
+        boost += 1.0
+    if ("too" in query_word_set or "toode" in query_word_set) and "too" in section_title_canonical:
         boost += 1.0
     if "töö" in query_word_set and "töö" in section_title:
         boost += 1.0
@@ -352,7 +406,7 @@ def get_context(
             distances = distances + [1.4 for _ in range(len(docs) - len(distances))]
         
         scoring_query = " ".join(query_texts).lower()
-        query_words = re.findall(r'\w+', scoring_query)
+        query_words = list(_text_words(scoring_query))
         query_numbers = re.findall(r'\d[\d\s]*', scoring_query)
         query_stems = {word[:5] for word in query_words if len(word) >= 6}
         scored_docs = []
@@ -448,7 +502,11 @@ def get_context(
 
         # Sorteerime tulemused lõpliku hübriidse skoori järgi
         entity_query = original_query or query
-        target_contract_ids = _mentioned_contract_ids(entity_query, metas)
+        contract_catalog_metas = _contract_catalog_metas()
+        target_contract_ids = (
+            _mentioned_contract_ids(entity_query, metas)
+            | _mentioned_contract_ids(entity_query, contract_catalog_metas)
+        )
         scored_docs = _append_contract_siblings(
             scored_docs,
             target_contract_ids,
@@ -493,6 +551,7 @@ def get_context(
                 return "", {
                     "fetch_k": fetch_k,
                     "query_texts": query_texts,
+                    "target_contract_ids": sorted(target_contract_ids),
                     "secret": secret_allowed,
                     "allowed_subject_ids": list(_normal_id_set(allowed_subject_ids)),
                     "allowed_tenant_ids": list(_normal_id_set(allowed_tenant_ids)),
@@ -545,6 +604,7 @@ def get_context(
             return context, {
                 "fetch_k": fetch_k,
                 "query_texts": query_texts,
+                "target_contract_ids": sorted(target_contract_ids),
                 "secret": secret_allowed,
                 "allowed_subject_ids": list(_normal_id_set(allowed_subject_ids)),
                 "allowed_tenant_ids": list(_normal_id_set(allowed_tenant_ids)),

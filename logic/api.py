@@ -74,8 +74,8 @@ class MainQueryRequest(BaseModel):
 class RetrievalRequest(BaseModel):
     query: str = Field(..., min_length=1)
     original_query: Optional[str] = None
-    n_results: Optional[int] = Field(5, ge=1, le=25)
-    max_context_blocks: Optional[int] = Field(3, ge=1, le=25)
+    n_results: Optional[int] = Field(9, ge=1, le=25)
+    max_context_blocks: Optional[int] = Field(5, ge=1, le=25)
     secret: Optional[bool] = False
     allowed_subject_ids: List[str] = Field(default_factory=list)
     allowed_tenant_ids: List[str] = Field(default_factory=list)
@@ -344,8 +344,8 @@ async def run_retrieval(req: RetrievalRequest, user: str = Depends(authenticate)
     start_time = time.time()
     start_time_str = time.strftime("%H:%M:%S")
     try:
-        n_results = req.n_results or 5
-        max_context_blocks = req.max_context_blocks or 3
+        n_results = req.n_results or 9
+        max_context_blocks = req.max_context_blocks or 5
         secret = bool(req.secret)
         allowed_subject_ids = [str(x).strip() for x in (req.allowed_subject_ids or []) if str(x).strip()]
         allowed_tenant_ids = [str(x).strip() for x in (req.allowed_tenant_ids or []) if str(x).strip()]
@@ -383,6 +383,8 @@ async def run_retrieval(req: RetrievalRequest, user: str = Depends(authenticate)
             "sources_returned_raw": retrieval_debug.get("candidates", []),
             "retrieval_debug": {
                 "fetch_k": retrieval_debug.get("fetch_k"),
+                "query_texts": retrieval_debug.get("query_texts", []),
+                "target_contract_ids": retrieval_debug.get("target_contract_ids", []),
                 "candidate_count": len(retrieval_debug.get("candidates", [])),
                 "secret_candidate_count": len([
                     c for c in retrieval_debug.get("candidates", [])
