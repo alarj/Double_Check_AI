@@ -72,6 +72,19 @@ def _first_result_list(results, key):
         return first if isinstance(first, list) else []
     return []
 
+def _flatten_result_lists(results, key):
+    """Tagastab Chroma query tulemused ühe listina ka mitme query_text korral."""
+    if not isinstance(results, dict):
+        return []
+    value = results.get(key)
+    if not value:
+        return []
+    if not isinstance(value, list):
+        return []
+    if value and isinstance(value[0], list):
+        return [item for group in value for item in group]
+    return value
+
 def is_secret_metadata(meta):
     """Demo access flag: only explicit classification_level=secret is restricted."""
     return str((meta or {}).get("classification_level", "")).strip().lower() == "secret"
@@ -313,23 +326,34 @@ def get_context(
         # Küsime vektorbaasist rohkem kandidaate kui lõppväljundisse vaja,
         # et Pythonis tehtav ümberreastamine ja dedupe saaks päriselt mõjuda.
         fetch_k = max(int(n_results or 5), int(max_context_blocks or 3), 5) * 4
-        results = collection.query(query_texts=[query], n_results=fetch_k)
+        query_texts = [str(query or "").strip()]
+        original_query_text = str(original_query or "").strip()
+        if original_query_text and original_query_text not in query_texts:
+            query_texts.append(original_query_text)
+        query_texts = [text for text in query_texts if text]
+        if not query_texts:
+            if return_debug:
+                return "", {"fetch_k": fetch_k, "candidates": []}
+            return ""
+
+        results = collection.query(query_texts=query_texts, n_results=fetch_k)
         
-        docs = _first_result_list(results, "documents")
+        docs = _flatten_result_lists(results, "documents")
         if not docs:
             if return_debug:
                 return "", {"fetch_k": fetch_k, "candidates": []}
             return ""
 
-        metas = _first_result_list(results, "metadatas")
-        distances = _first_result_list(results, "distances")
+        metas = _flatten_result_lists(results, "metadatas")
+        distances = _flatten_result_lists(results, "distances")
         if len(metas) < len(docs):
             metas = metas + [{} for _ in range(len(docs) - len(metas))]
         if len(distances) < len(docs):
             distances = distances + [1.4 for _ in range(len(docs) - len(distances))]
         
-        query_words = re.findall(r'\w+', query.lower())
-        query_numbers = re.findall(r'\d[\d\s]*', query.lower())
+        scoring_query = " ".join(query_texts).lower()
+        query_words = re.findall(r'\w+', scoring_query)
+        query_numbers = re.findall(r'\d[\d\s]*', scoring_query)
         query_stems = {word[:5] for word in query_words if len(word) >= 6}
         scored_docs = []
         seen_snippets = set()
@@ -379,12 +403,13 @@ def get_context(
             k_score += 0.18 * len(shared_doc_stems)
             k_score += 0.3 * len(shared_title_stems)
 
-            if query.lower() in doc_lower:
-                k_score += 0.5
-            if query.lower() in para_title:
-                k_score += 0.4
-            if query.lower() in display_name:
-                k_score += 0.25
+            for exact_query in {text.lower() for text in query_texts if text.strip()}:
+                if exact_query in doc_lower:
+                    k_score += 0.5
+                if exact_query in para_title:
+                    k_score += 0.4
+                if exact_query in display_name:
+                    k_score += 0.25
 
             # Kui enamik päringu sisulistest sõnadest elab pealkirjas,
             # tasub see tõsta kõrgemale ka siis, kui vektorotsing eelistab detailseid erandeid.
@@ -467,6 +492,7 @@ def get_context(
             if return_debug:
                 return "", {
                     "fetch_k": fetch_k,
+                    "query_texts": query_texts,
                     "secret": secret_allowed,
                     "allowed_subject_ids": list(_normal_id_set(allowed_subject_ids)),
                     "allowed_tenant_ids": list(_normal_id_set(allowed_tenant_ids)),
@@ -518,6 +544,7 @@ def get_context(
         if return_debug:
             return context, {
                 "fetch_k": fetch_k,
+                "query_texts": query_texts,
                 "secret": secret_allowed,
                 "allowed_subject_ids": list(_normal_id_set(allowed_subject_ids)),
                 "allowed_tenant_ids": list(_normal_id_set(allowed_tenant_ids)),
