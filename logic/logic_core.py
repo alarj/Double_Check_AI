@@ -76,27 +76,235 @@ def is_secret_metadata(meta):
     """Demo access flag: only explicit classification_level=secret is restricted."""
     return str((meta or {}).get("classification_level", "")).strip().lower() == "secret"
 
-def format_debug_candidates(scored_docs, selected_indexes, secret_allowed=False):
+def is_estonian_personal_code(value):
+    value = str(value or "").strip()
+    # Kursusetöö testandmetes kasutatakse ka fiktiivseid isikukoode.
+    # Seetõttu maskeerime kõik Eesti isikukoodi kujuga 11-kohalised väärtused,
+    # mitte ainult kontrollsummaga kehtivad isikukoodid.
+    return bool(re.fullmatch(r"[1-8]\d{10}", value))
+
+def mask_personal_codes_in_text(text, replacement="***"):
+    text = str(text or "")
+
+    def replace_labeled_identifier(match):
+        return f"{match.group(1)}{replacement}"
+
+    text = re.sub(
+        r"(\b(?:isikukood|isiku\s*kood|personal\s*code|personal_code|national\s*id|national_id)\b\s*:?\s*)[^\s,;.)\]}]+",
+        replace_labeled_identifier,
+        text,
+        flags=re.IGNORECASE,
+    )
+
+    def replace_match(match):
+        value = match.group(0)
+        return replacement if is_estonian_personal_code(value) else value
+
+    return re.sub(r"\b[1-8]\d{10}\b", replace_match, text)
+
+def mask_personal_codes(value, replacement="***"):
+    if isinstance(value, str):
+        return mask_personal_codes_in_text(value, replacement)
+    if isinstance(value, list):
+        return [mask_personal_codes(item, replacement) for item in value]
+    if isinstance(value, dict):
+        is_private_person = (
+            str(value.get("counterparty_type", "")).strip().lower() == "private_person"
+            or str(value.get("subject_type", "")).strip().lower() == "private_person"
+        )
+        return {
+            key: (
+                replacement
+                if is_private_person and key in {"subject_id", "counterparty_id", "personal_id"}
+                else mask_personal_codes(item, replacement)
+            )
+            for key, item in value.items()
+        }
+    return value
+
+def _normal_id_set(values):
+    if not values:
+        return set()
+    return {str(value).strip() for value in values if str(value).strip()}
+
+def is_contract_metadata(meta):
+    return str((meta or {}).get("doc_type", "")).strip().lower() == "contract"
+
+def _text_words(value):
+    return {
+        word
+        for word in re.findall(r"\w+", str(value or "").lower())
+        if len(word) > 1
+    }
+
+def _mentioned_contract_ids(query, metas):
+    query_l = str(query or "").lower()
+    query_words_set = _text_words(query_l)
+    mentioned = set()
+    for meta in metas:
+        if not is_contract_metadata(meta):
+            continue
+        contract_id = str(meta.get("contract_id", "")).strip()
+        if contract_id and contract_id.lower() in query_l:
+            mentioned.add(contract_id)
+            continue
+
+        subject_name = str(meta.get("subject_name", "")).strip()
+        subject_words = _text_words(subject_name)
+        if contract_id and subject_words and subject_words.issubset(query_words_set):
+            mentioned.add(contract_id)
+    return mentioned
+
+def _contract_section_intent_boost(meta, query_words):
+    section_title = str((meta or {}).get("section_title", "")).lower()
+    section_words = _text_words(section_title)
+    query_word_set = set(query_words)
+    query_stems = {word[:4] for word in query_word_set if len(word) >= 4}
+    section_stems = {word[:4] for word in section_words if len(word) >= 4}
+    boost = 0.35 * len(section_words & query_word_set)
+    boost += 0.45 * len(section_stems & query_stems)
+    if "tasu" in query_word_set and "tasu" in section_title:
+        boost += 1.4
+    if "sisu" in query_word_set and "sisu" in section_title:
+        boost += 1.6
+    if any(word.startswith("sisu") for word in query_word_set) and "sisu" in section_title:
+        boost += 1.0
+    if "töö" in query_word_set and "töö" in section_title:
+        boost += 1.0
+    if "lepingupool" in section_title or "lepingupooled" in section_title:
+        boost += 0.2
+    if (
+        any(word.startswith("sisu") or word.startswith("tĆ¶Ć¶") for word in query_word_set)
+        and ("allkirjad" in section_title or "lepingupooled" in section_title)
+    ):
+        boost -= 0.8
+    return boost
+
+def _append_contract_siblings(scored_docs, contract_ids, seen_snippets, query_words):
+    if not contract_ids:
+        return scored_docs
+
+    existing_keys = {
+        (
+            str((meta or {}).get("contract_id", "")),
+            str((meta or {}).get("section_index", "")),
+        )
+        for *_rest, meta in scored_docs
+        if is_contract_metadata(meta)
+    }
+
+    for contract_id in contract_ids:
+        try:
+            results = collection.get(
+                where={"contract_id": contract_id},
+                include=["documents", "metadatas"],
+            )
+        except Exception:
+            continue
+
+        docs = results.get("documents") or []
+        metas = results.get("metadatas") or []
+        for doc, meta in zip(docs, metas):
+            if not isinstance(doc, str) or not doc.strip() or not isinstance(meta, dict):
+                continue
+            key = (str(meta.get("contract_id", "")), str(meta.get("section_index", "")))
+            if key in existing_keys:
+                continue
+            snippet = doc[:100].strip().lower()
+            if snippet in seen_snippets:
+                continue
+            existing_keys.add(key)
+            seen_snippets.add(snippet)
+            source = meta.get("source") or meta.get("contract_id") or "LEPING"
+            family_key = ("contract", str(meta.get("contract_id", "")), str(meta.get("section_index", "")))
+            section_words = _text_words(meta.get("section_title", ""))
+            shared_section_words = section_words & set(query_words)
+            sibling_score = 1.3 + 0.35 * len(shared_section_words)
+            section_title = str(meta.get("section_title", "")).lower()
+            if "tasu" in query_words and "tasu" in section_title:
+                sibling_score += 1.2
+            if "sisu" in query_words and "sisu" in section_title:
+                sibling_score += 1.0
+            if "töö" in query_words and "töö" in section_title:
+                sibling_score += 0.6
+            if "pool" in section_title or "lepingupool" in section_title:
+                sibling_score += 0.2
+            scored_docs.append((sibling_score, source, doc, family_key, meta))
+    return scored_docs
+
+def get_candidate_filter_reason(
+    meta,
+    secret_allowed=False,
+    allowed_subject_ids=None,
+    allowed_tenant_ids=None,
+    allow_all_subjects=False,
+):
+    meta = meta or {}
+    if is_secret_metadata(meta) and not secret_allowed:
+        return "secret_not_allowed"
+
+    allowed_tenants = _normal_id_set(allowed_tenant_ids)
+    tenant_id = str(meta.get("tenant_id", "")).strip()
+    if allowed_tenants and tenant_id and tenant_id not in allowed_tenants:
+        return "tenant_not_allowed"
+
+    if is_contract_metadata(meta) and not allow_all_subjects:
+        allowed_subjects = _normal_id_set(allowed_subject_ids)
+        subject_id = str(meta.get("subject_id", "")).strip()
+        if subject_id and subject_id not in allowed_subjects:
+            return "subject_not_allowed"
+
+    return ""
+
+def format_debug_candidates(
+    scored_docs,
+    selected_indexes,
+    secret_allowed=False,
+    allowed_subject_ids=None,
+    allowed_tenant_ids=None,
+    allow_all_subjects=False,
+    allow_personal_data=False,
+):
     candidates = []
     for i, (sc, s, d, _family_key, m) in enumerate(scored_docs):
         is_secret = is_secret_metadata(m)
+        filter_reason = get_candidate_filter_reason(
+            m,
+            secret_allowed=secret_allowed,
+            allowed_subject_ids=allowed_subject_ids,
+            allowed_tenant_ids=allowed_tenant_ids,
+            allow_all_subjects=allow_all_subjects,
+        )
+        visible_meta = m if allow_personal_data else mask_personal_codes(m)
+        visible_text = d if allow_personal_data else mask_personal_codes_in_text(d)
         item = {
             "rank": i + 1,
             "score": round(sc, 4),
             "source": s,
             "selected": i in selected_indexes,
-            "metadata": m,
-            "text": d,
+            "metadata": visible_meta,
+            "text": visible_text,
             "is_secret": is_secret,
             "filtered": False,
         }
-        if is_secret and not secret_allowed:
+        if filter_reason:
             item["filtered"] = True
-            item["filtered_reason"] = "secret_not_allowed"
+            item["filtered_reason"] = filter_reason
         candidates.append(item)
     return candidates
 
-def get_context(query, n_results=5, max_context_blocks=3, return_debug=False, secret=False):
+def get_context(
+    query,
+    n_results=5,
+    max_context_blocks=3,
+    return_debug=False,
+    secret=False,
+    allowed_subject_ids=None,
+    allowed_tenant_ids=None,
+    allow_all_subjects=False,
+    allow_personal_data=False,
+    original_query=None,
+):
     """
     Teostab RAG-otsingu koos hübriidse skoorimisega (Vektor + Märksõnad).
     Optimeeritud bge-m3 distantsidele.
@@ -199,19 +407,58 @@ def get_context(query, n_results=5, max_context_blocks=3, return_debug=False, se
             
             final_score = v_score + k_score
             source = meta.get("source") or meta.get("law") or "RHS"
-            family_key = (
-                str(meta.get("law", "")),
-                str(meta.get("section", "")),
-                str(meta.get("subsection", "")),
-            )
+            if is_contract_metadata(meta):
+                family_key = (
+                    "contract",
+                    str(meta.get("contract_id", "")),
+                    str(meta.get("section_index", "")),
+                )
+            else:
+                family_key = (
+                    str(meta.get("law", "")),
+                    str(meta.get("section", "")),
+                    str(meta.get("subsection", "")),
+                )
             scored_docs.append((final_score, source, doc, family_key, meta))
 
         # Sorteerime tulemused lõpliku hübriidse skoori järgi
+        entity_query = original_query or query
+        target_contract_ids = _mentioned_contract_ids(entity_query, metas)
+        scored_docs = _append_contract_siblings(
+            scored_docs,
+            target_contract_ids,
+            seen_snippets,
+            query_words,
+        )
+        if target_contract_ids:
+            boosted_docs = []
+            for sc, source, doc, family_key, meta in scored_docs:
+                contract_id = str((meta or {}).get("contract_id", ""))
+                if is_contract_metadata(meta) and contract_id in target_contract_ids:
+                    sc += 0.8 + _contract_section_intent_boost(meta, query_words)
+                boosted_docs.append((sc, source, doc, family_key, meta))
+            scored_docs = boosted_docs
+
         scored_docs.sort(key=lambda x: x[0], reverse=True)
         secret_allowed = bool(secret)
         selectable_docs = [
             item for item in scored_docs
-            if secret_allowed or not is_secret_metadata(item[4])
+            if not get_candidate_filter_reason(
+                item[4],
+                secret_allowed=secret_allowed,
+                allowed_subject_ids=allowed_subject_ids,
+                allowed_tenant_ids=allowed_tenant_ids,
+                allow_all_subjects=allow_all_subjects,
+            )
+            and (
+                not target_contract_ids
+                or not is_contract_metadata(item[4])
+                or str((item[4] or {}).get("contract_id", "")) in target_contract_ids
+            )
+            and (
+                not target_contract_ids
+                or is_contract_metadata(item[4])
+            )
         ]
 
         # FAIL FAST lävend: bge-m3 puhul on 0.65-0.7 turvaline piir
@@ -221,7 +468,19 @@ def get_context(query, n_results=5, max_context_blocks=3, return_debug=False, se
                 return "", {
                     "fetch_k": fetch_k,
                     "secret": secret_allowed,
-                    "candidates": format_debug_candidates(scored_docs, set(), secret_allowed),
+                    "allowed_subject_ids": list(_normal_id_set(allowed_subject_ids)),
+                    "allowed_tenant_ids": list(_normal_id_set(allowed_tenant_ids)),
+                    "allow_all_subjects": bool(allow_all_subjects),
+                    "allow_personal_data": bool(allow_personal_data),
+                    "candidates": format_debug_candidates(
+                        scored_docs,
+                        set(),
+                        secret_allowed,
+                        allowed_subject_ids=allowed_subject_ids,
+                        allowed_tenant_ids=allowed_tenant_ids,
+                        allow_all_subjects=allow_all_subjects,
+                        allow_personal_data=allow_personal_data,
+                    ),
                 }
             return ""
 
@@ -230,13 +489,28 @@ def get_context(query, n_results=5, max_context_blocks=3, return_debug=False, se
         selected_indexes = set()
         limit = max(1, int(max_context_blocks or 3))
         for selected_index, (sc, s, d, family_key, meta) in enumerate(scored_docs):
-            if not secret_allowed and is_secret_metadata(meta):
+            if (
+                target_contract_ids
+                and is_contract_metadata(meta)
+                and str((meta or {}).get("contract_id", "")) not in target_contract_ids
+            ):
+                continue
+            if target_contract_ids and not is_contract_metadata(meta):
+                continue
+            if get_candidate_filter_reason(
+                meta,
+                secret_allowed=secret_allowed,
+                allowed_subject_ids=allowed_subject_ids,
+                allowed_tenant_ids=allowed_tenant_ids,
+                allow_all_subjects=allow_all_subjects,
+            ):
                 continue
             if family_key in seen_families:
                 continue
             seen_families.add(family_key)
             selected_indexes.add(selected_index)
-            formatted_results.append(f"--- ALLIKAS: {s} ---\n{d}")
+            visible_doc = d if allow_personal_data else mask_personal_codes_in_text(d)
+            formatted_results.append(f"--- ALLIKAS: {s} ---\n{visible_doc}")
             if len(formatted_results) >= limit:
                 break
             
@@ -245,7 +519,19 @@ def get_context(query, n_results=5, max_context_blocks=3, return_debug=False, se
             return context, {
                 "fetch_k": fetch_k,
                 "secret": secret_allowed,
-                "candidates": format_debug_candidates(scored_docs, selected_indexes, secret_allowed),
+                "allowed_subject_ids": list(_normal_id_set(allowed_subject_ids)),
+                "allowed_tenant_ids": list(_normal_id_set(allowed_tenant_ids)),
+                "allow_all_subjects": bool(allow_all_subjects),
+                "allow_personal_data": bool(allow_personal_data),
+                "candidates": format_debug_candidates(
+                    scored_docs,
+                    selected_indexes,
+                    secret_allowed,
+                    allowed_subject_ids=allowed_subject_ids,
+                    allowed_tenant_ids=allowed_tenant_ids,
+                    allow_all_subjects=allow_all_subjects,
+                    allow_personal_data=allow_personal_data,
+                ),
             }
         return context
         

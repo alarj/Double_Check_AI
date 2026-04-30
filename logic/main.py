@@ -27,10 +27,25 @@ total_cores = os.cpu_count() or 1
 def log_json_event(data):
     """Kirjutab sündmuse logifaili JSON formaadis."""
     try:
+        data = logic_core.mask_personal_codes(data)
         with open(LOG_FILE, "a", encoding="utf-8") as f:
             f.write(json.dumps(data, ensure_ascii=False) + "\n")
     except Exception as e:
         print(f"VIGA LOGIMISEL: {e}")
+
+
+def parse_csv_ids(value):
+    return [
+        item.strip()
+        for item in str(value or "").split(",")
+        if item.strip()
+    ]
+
+
+def safe_filename_part(value):
+    value = str(value or "log").strip()
+    value = value.replace(" ", "_").replace(":", "-")
+    return "".join(ch for ch in value if ch.isalnum() or ch in "._-")[:80] or "log"
 
 
 def append_prompt_change_log(old_prompts, new_prompts):
@@ -71,15 +86,30 @@ def fetch_logs_via_api(source, limit=50):
         return [], str(e)
 
 
-def fetch_retrieval_context_via_api(query_text, n_results=5, max_context_blocks=3, secret=False):
+def fetch_retrieval_context_via_api(
+    query_text,
+    original_query=None,
+    n_results=5,
+    max_context_blocks=3,
+    secret=False,
+    allowed_subject_ids=None,
+    allowed_tenant_ids=None,
+    allow_all_subjects=False,
+    allow_personal_data=False,
+):
     """Toob RAG konteksti REST API /retrieval endpointist."""
     try:
         auth_token = base64.b64encode(f"{API_USER}:{API_PASSWORD}".encode("utf-8")).decode("utf-8")
         payload = json.dumps({
             "query": query_text,
+            "original_query": original_query,
             "n_results": n_results,
             "max_context_blocks": max_context_blocks,
             "secret": bool(secret),
+            "allowed_subject_ids": allowed_subject_ids or [],
+            "allowed_tenant_ids": allowed_tenant_ids or [],
+            "allow_all_subjects": bool(allow_all_subjects),
+            "allow_personal_data": bool(allow_personal_data),
         }).encode("utf-8")
         req = urllib.request.Request(
             f"{API_BASE_URL}/retrieval",
@@ -332,6 +362,7 @@ def render_logs():
             "Logi allikas:",
             options=log_options,
             index=log_options.index(st.session_state.log_source) if st.session_state.log_source in log_options else 0,
+            disabled=st.session_state.processing,
         )
         st.session_state.log_source = log_source
 
@@ -341,7 +372,7 @@ def render_logs():
         elif not logs:
             st.info("Valitud allikas ei tagastanud logikirjeid.")
         else:
-            for entry in reversed(logs):
+            for entry_index, entry in enumerate(reversed(logs)):
                 if not isinstance(entry, dict):
                     st.text(str(entry))
                     continue
@@ -355,6 +386,18 @@ def render_logs():
                 title_text = entry.get("user_input") or entry.get("endpoint") or "logikirje"
                 label = f"{marker} {entry.get('timestamp', '---')} | {str(title_text)[:40]}"
                 with st.expander(label):
+                    download_name = f"{log_source}_{safe_filename_part(entry.get('timestamp', 'log'))}.json"
+                    if st.session_state.processing:
+                        st.caption("Allalaadimine on päringu töötlemise ajal peatatud.")
+                    else:
+                        st.download_button(
+                            "Laadi see logikirje alla",
+                            data=json.dumps(entry, ensure_ascii=False, indent=2),
+                            file_name=download_name,
+                            mime="application/json",
+                            key=f"download_{log_source}_{entry_index}_{safe_filename_part(entry.get('timestamp', 'log'))}",
+                            on_click="ignore",
+                        )
                     st.json(entry)
 
 
@@ -407,10 +450,20 @@ if "current_query" not in st.session_state:
     st.session_state.current_query = None
 if "current_secret" not in st.session_state:
     st.session_state.current_secret = False
+if "current_allow_all_subjects" not in st.session_state:
+    st.session_state.current_allow_all_subjects = False
+if "current_allow_personal_data" not in st.session_state:
+    st.session_state.current_allow_personal_data = False
+if "current_allowed_subject_ids_text" not in st.session_state:
+    st.session_state.current_allowed_subject_ids_text = ""
+if "current_allowed_tenant_ids_text" not in st.session_state:
+    st.session_state.current_allowed_tenant_ids_text = ""
 if "log_source" not in st.session_state:
     st.session_state.log_source = "ui"
 if "status_messages" not in st.session_state:
     st.session_state.status_messages = []
+if "processing_initialized" not in st.session_state:
+    st.session_state.processing_initialized = False
 if "last_elapsed_sec" not in st.session_state:
     st.session_state.last_elapsed_sec = 0.0
 
@@ -551,12 +604,48 @@ with st.form(key="query_form", clear_on_submit=False):
         disabled=st.session_state.processing,
         key="query_input",
     )
-    secret_input = st.checkbox(
-        "Luba salajane info",
-        value=st.session_state.current_secret,
-        disabled=st.session_state.processing,
-        key="secret_input",
-    )
+    rights_col1, rights_col2, rights_col3 = st.columns(3)
+    with rights_col1:
+        secret_input = st.checkbox(
+            "Luba salajane info",
+            value=st.session_state.current_secret,
+            disabled=st.session_state.processing,
+            key="secret_input",
+            help="Kui märgitud, võivad classification_level=secret chunkid jõuda kasutatavasse RAG konteksti.",
+        )
+    with rights_col2:
+        allow_all_subjects_input = st.checkbox(
+            "Luba kõik subjektid",
+            value=st.session_state.current_allow_all_subjects,
+            disabled=st.session_state.processing,
+            key="allow_all_subjects_input",
+            help="Kui märgitud, ei piirata lepinguid subject_id väärtuse järgi. Demo vastab näiteks personali- või administraatoriõigusele.",
+        )
+    with rights_col3:
+        allow_personal_data_input = st.checkbox(
+            "Luba isikuandmed",
+            value=st.session_state.current_allow_personal_data,
+            disabled=st.session_state.processing,
+            key="allow_personal_data_input",
+            help="Kui märkimata, maskeeritakse Eesti isikukoodid kontekstis ja debug-väljundis kujule ***. Logides maskeeritakse isikukoodid alati.",
+        )
+    ids_col1, ids_col2 = st.columns(2)
+    with ids_col1:
+        allowed_subject_ids_text = st.text_input(
+            "Lubatud subject_id-d",
+            value=st.session_state.current_allowed_subject_ids_text,
+            disabled=st.session_state.processing,
+            key="allowed_subject_ids_input",
+            help="Komadega eraldatud subjektid või partnerid, kelle lepinguid võib kasutada. Näiteks 786031412340 või 88124036.",
+        )
+    with ids_col2:
+        allowed_tenant_ids_text = st.text_input(
+            "Lubatud tenant_id-d",
+            value=st.session_state.current_allowed_tenant_ids_text,
+            disabled=st.session_state.processing,
+            key="allowed_tenant_ids_input",
+            help="Komadega eraldatud tellija/tenant ID-d. Kui väli on tühi, tenant-piirangut ei rakendata.",
+        )
     submit_button = st.form_submit_button("Saada päring", disabled=st.session_state.processing)
 
 status_section = st.container()
@@ -573,7 +662,12 @@ if submit_button and user_input:
     st.session_state.processing = True
     st.session_state.current_query = user_input
     st.session_state.current_secret = bool(secret_input)
+    st.session_state.current_allow_all_subjects = bool(allow_all_subjects_input)
+    st.session_state.current_allow_personal_data = bool(allow_personal_data_input)
+    st.session_state.current_allowed_subject_ids_text = allowed_subject_ids_text
+    st.session_state.current_allowed_tenant_ids_text = allowed_tenant_ids_text
     st.session_state.status_messages = []
+    st.session_state.processing_initialized = False
     st.session_state.last_elapsed_sec = 0.0
     st.session_state.last_response = None
     st.session_state.last_post_analysis = None
@@ -582,8 +676,20 @@ if submit_button and user_input:
 
 # --- TÖÖTLUSLOOGIKA ---
 if st.session_state.processing and st.session_state.current_query:
+    if not st.session_state.processing_initialized:
+        st.session_state.status_messages = []
+        st.session_state.last_elapsed_sec = 0.0
+        st.session_state.last_response = None
+        st.session_state.last_post_analysis = None
+        st.session_state.last_status = None
+        st.session_state.processing_initialized = True
+
     u_input = st.session_state.current_query
     secret_allowed = bool(st.session_state.current_secret)
+    allow_all_subjects = bool(st.session_state.current_allow_all_subjects)
+    allow_personal_data = bool(st.session_state.current_allow_personal_data)
+    allowed_subject_ids = parse_csv_ids(st.session_state.current_allowed_subject_ids_text)
+    allowed_tenant_ids = parse_csv_ids(st.session_state.current_allowed_tenant_ids_text)
     start_time_total = time.time()
     # Tühjendame eelmise päringu nähtava väljundi kohe uue töötluse alguses.
     status_placeholder.empty()
@@ -593,6 +699,10 @@ if st.session_state.processing and st.session_state.current_query:
         "timestamp": logic_core.get_ee_time().strftime("%Y-%m-%d %H:%M:%S"),
         "user_input": u_input,
         "secret": secret_allowed,
+        "allow_all_subjects": allow_all_subjects,
+        "allow_personal_data": allow_personal_data,
+        "allowed_subject_ids": allowed_subject_ids,
+        "allowed_tenant_ids": allowed_tenant_ids,
         "security_level": security_option,
         "steps": {},
         "final_status": "PENDING",
@@ -679,9 +789,14 @@ if st.session_state.processing and st.session_state.current_query:
             ctx_start = time.time()
             fetched_context, retrieval_data, retrieval_error = fetch_retrieval_context_via_api(
                 active_query,
+                original_query=u_input,
                 n_results=selected_n_results,
                 max_context_blocks=selected_max_context_blocks,
                 secret=secret_allowed,
+                allowed_subject_ids=allowed_subject_ids,
+                allowed_tenant_ids=allowed_tenant_ids,
+                allow_all_subjects=allow_all_subjects,
+                allow_personal_data=allow_personal_data,
             )
             if retrieval_error:
                 raise RuntimeError(f"Retrieval API viga: {retrieval_error}")
@@ -692,6 +807,12 @@ if st.session_state.processing and st.session_state.current_query:
             log_data["steps"]["context_fetch"] = {
                 "found": context_found,
                 "secret": secret_allowed,
+                "allow_all_subjects": allow_all_subjects,
+                "allow_personal_data": allow_personal_data,
+                "allowed_subject_ids": allowed_subject_ids,
+                "allowed_tenant_ids": allowed_tenant_ids,
+                "retrieval_query": active_query,
+                "original_query": u_input,
                 "duration": ctx_duration,
                 "api_response": retrieval_data or {},
             }
@@ -703,7 +824,12 @@ if st.session_state.processing and st.session_state.current_query:
             else:
                 update_ui(f"\U0001F9E0 Samm 3/4: Genereerin vastust ({main_model_input}) | päring: {active_query}")
                 rag_p_template = logic_core.PROMPTS.get("RAG_PROMPT", "")
-                rag_p = rag_p_template.replace("{context}", fetched_context).replace("{query}", active_query)
+                visible_active_query = (
+                    u_input
+                    if allow_personal_data
+                    else logic_core.mask_personal_codes_in_text(u_input)
+                )
+                rag_p = rag_p_template.replace("{context}", fetched_context).replace("{query}", visible_active_query)
 
                 step_start_main = time.time()
                 main_answer = logic_core.ask_ollama(main_model_input, rag_p, selected_threads, selected_timeout)
@@ -722,9 +848,14 @@ if st.session_state.processing and st.session_state.current_query:
                 if any(x in security_option for x in ["järelkontroll", "Täiskontroll"]):
                     update_ui("\U0001F6E1 Samm 4/4: Teen vastuse kvaliteedikontrolli...")
                     post_p_template = logic_core.PROMPTS.get("POST_CHECK_PROMPT", "")
+                    visible_u_input = (
+                        u_input
+                        if allow_personal_data
+                        else logic_core.mask_personal_codes_in_text(u_input)
+                    )
                     post_p = (
                         post_p_template
-                        .replace("{u_input}", u_input)
+                        .replace("{u_input}", visible_u_input)
                         .replace("{context}", fetched_context)
                         .replace("{main_res}", main_answer)
                     )
@@ -777,6 +908,7 @@ if st.session_state.processing and st.session_state.current_query:
 
         log_json_event(log_data)
         st.session_state.processing = False
+        st.session_state.processing_initialized = False
         st.rerun()
 
 if st.session_state.last_elapsed_sec > 0:

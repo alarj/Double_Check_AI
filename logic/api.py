@@ -73,9 +73,14 @@ class MainQueryRequest(BaseModel):
 
 class RetrievalRequest(BaseModel):
     query: str = Field(..., min_length=1)
+    original_query: Optional[str] = None
     n_results: Optional[int] = Field(5, ge=1, le=25)
     max_context_blocks: Optional[int] = Field(3, ge=1, le=25)
     secret: Optional[bool] = False
+    allowed_subject_ids: List[str] = Field(default_factory=list)
+    allowed_tenant_ids: List[str] = Field(default_factory=list)
+    allow_all_subjects: Optional[bool] = False
+    allow_personal_data: Optional[bool] = False
 
 class PostCheckRequest(BaseModel):
     ai_response: str
@@ -103,6 +108,7 @@ def log_api_call(endpoint: str, status_code: int, duration: float, user: str, ex
     }
     if extra_data:
         log_entry.update(extra_data)
+    log_entry = logic_core.mask_personal_codes(log_entry)
         
     try:
         with open(API_LOG_FILE, "a", encoding="utf-8") as f:
@@ -341,21 +347,35 @@ async def run_retrieval(req: RetrievalRequest, user: str = Depends(authenticate)
         n_results = req.n_results or 5
         max_context_blocks = req.max_context_blocks or 3
         secret = bool(req.secret)
+        allowed_subject_ids = [str(x).strip() for x in (req.allowed_subject_ids or []) if str(x).strip()]
+        allowed_tenant_ids = [str(x).strip() for x in (req.allowed_tenant_ids or []) if str(x).strip()]
+        allow_all_subjects = bool(req.allow_all_subjects)
+        allow_personal_data = bool(req.allow_personal_data)
         context, retrieval_debug = logic_core.get_context(
             req.query,
             n_results=n_results,
             max_context_blocks=max_context_blocks,
             return_debug=True,
             secret=secret,
+            allowed_subject_ids=allowed_subject_ids,
+            allowed_tenant_ids=allowed_tenant_ids,
+            allow_all_subjects=allow_all_subjects,
+            allow_personal_data=allow_personal_data,
+            original_query=req.original_query,
         )
         duration = time.time() - start_time
         blocks = [f"--- ALLIKAS:{block}" for block in context.split("--- ALLIKAS:") if block.strip()]
 
         response_data = {
             "query": req.query,
+            "original_query": req.original_query,
             "n_results": n_results,
             "max_context_blocks": max_context_blocks,
             "secret": secret,
+            "allowed_subject_ids": allowed_subject_ids,
+            "allowed_tenant_ids": allowed_tenant_ids,
+            "allow_all_subjects": allow_all_subjects,
+            "allow_personal_data": allow_personal_data,
             "start_time": start_time_str,
             "found": bool(context.strip()),
             "context": context,
@@ -372,6 +392,15 @@ async def run_retrieval(req: RetrievalRequest, user: str = Depends(authenticate)
                     c for c in retrieval_debug.get("candidates", [])
                     if c.get("filtered_reason") == "secret_not_allowed"
                 ]),
+                "filtered_subject_count": len([
+                    c for c in retrieval_debug.get("candidates", [])
+                    if c.get("filtered_reason") == "subject_not_allowed"
+                ]),
+                "filtered_tenant_count": len([
+                    c for c in retrieval_debug.get("candidates", [])
+                    if c.get("filtered_reason") == "tenant_not_allowed"
+                ]),
+                "personal_data_masked": not allow_personal_data,
             },
             "raw_context_preview": (context[:200] + "...") if context else "PUUDUB",
             "duration": round(duration * 1000, 2),
