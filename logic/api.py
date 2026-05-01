@@ -385,6 +385,8 @@ async def run_retrieval(req: RetrievalRequest, user: str = Depends(authenticate)
                 "fetch_k": retrieval_debug.get("fetch_k"),
                 "query_texts": retrieval_debug.get("query_texts", []),
                 "target_contract_ids": retrieval_debug.get("target_contract_ids", []),
+                "contract_intent": bool(retrieval_debug.get("contract_intent")),
+                "contract_probe_added": bool(retrieval_debug.get("contract_probe_added")),
                 "candidate_count": len(retrieval_debug.get("candidates", [])),
                 "secret_candidate_count": len([
                     c for c in retrieval_debug.get("candidates", [])

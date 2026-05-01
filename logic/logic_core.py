@@ -299,6 +299,34 @@ def _append_contract_siblings(scored_docs, contract_ids, seen_snippets, query_wo
             scored_docs.append((sibling_score, source, doc, family_key, meta))
     return scored_docs
 
+def _merge_query_results(base_results, extra_results):
+    """Liidab kaks Chroma query tulemust üheks key->[list-of-lists] struktuuriks."""
+    merged = {}
+    for key in ("documents", "metadatas", "distances", "ids"):
+        base_value = (base_results or {}).get(key) or []
+        extra_value = (extra_results or {}).get(key) or []
+        if isinstance(base_value, list) and base_value and isinstance(base_value[0], list):
+            base_groups = base_value
+        elif isinstance(base_value, list):
+            base_groups = [base_value]
+        else:
+            base_groups = [[]]
+        if isinstance(extra_value, list) and extra_value and isinstance(extra_value[0], list):
+            extra_groups = extra_value
+        elif isinstance(extra_value, list):
+            extra_groups = [extra_value]
+        else:
+            extra_groups = [[]]
+
+        max_len = max(len(base_groups), len(extra_groups))
+        groups = []
+        for idx in range(max_len):
+            left = base_groups[idx] if idx < len(base_groups) and isinstance(base_groups[idx], list) else []
+            right = extra_groups[idx] if idx < len(extra_groups) and isinstance(extra_groups[idx], list) else []
+            groups.append(left + right)
+        merged[key] = groups
+    return merged
+
 def get_candidate_filter_reason(
     meta,
     secret_allowed=False,
@@ -391,6 +419,28 @@ def get_context(
             return ""
 
         results = collection.query(query_texts=query_texts, n_results=fetch_k)
+
+        contract_intent = any(
+            token in " ".join(query_texts).lower()
+            for token in ["leping", "lepingu", "lepingud", "tasu", "töö sisu", "töö sisu", "toode sisu", "subject_id"]
+        )
+        contract_probe_added = False
+        if contract_intent:
+            contract_results = None
+            for contract_where in ({"doc_type": "contract"}, {"type": "leping"}, {"chunk_type": "contract_section"}):
+                try:
+                    contract_results = collection.query(
+                        query_texts=query_texts,
+                        n_results=max(fetch_k, 30),
+                        where=contract_where,
+                    )
+                except Exception:
+                    contract_results = None
+                if _flatten_result_lists(contract_results or {}, "documents"):
+                    break
+            if _flatten_result_lists(contract_results or {}, "documents"):
+                results = _merge_query_results(results, contract_results)
+                contract_probe_added = True
         
         docs = _flatten_result_lists(results, "documents")
         if not docs:
@@ -521,6 +571,13 @@ def get_context(
                     sc += 0.8 + _contract_section_intent_boost(meta, query_words)
                 boosted_docs.append((sc, source, doc, family_key, meta))
             scored_docs = boosted_docs
+        elif contract_intent:
+            boosted_docs = []
+            for sc, source, doc, family_key, meta in scored_docs:
+                if is_contract_metadata(meta):
+                    sc += 0.65 + _contract_section_intent_boost(meta, query_words)
+                boosted_docs.append((sc, source, doc, family_key, meta))
+            scored_docs = boosted_docs
 
         scored_docs.sort(key=lambda x: x[0], reverse=True)
         secret_allowed = bool(secret)
@@ -552,6 +609,8 @@ def get_context(
                     "fetch_k": fetch_k,
                     "query_texts": query_texts,
                     "target_contract_ids": sorted(target_contract_ids),
+                    "contract_intent": bool(contract_intent),
+                    "contract_probe_added": bool(contract_probe_added),
                     "secret": secret_allowed,
                     "allowed_subject_ids": list(_normal_id_set(allowed_subject_ids)),
                     "allowed_tenant_ids": list(_normal_id_set(allowed_tenant_ids)),
@@ -605,6 +664,8 @@ def get_context(
                 "fetch_k": fetch_k,
                 "query_texts": query_texts,
                 "target_contract_ids": sorted(target_contract_ids),
+                "contract_intent": bool(contract_intent),
+                "contract_probe_added": bool(contract_probe_added),
                 "secret": secret_allowed,
                 "allowed_subject_ids": list(_normal_id_set(allowed_subject_ids)),
                 "allowed_tenant_ids": list(_normal_id_set(allowed_tenant_ids)),
