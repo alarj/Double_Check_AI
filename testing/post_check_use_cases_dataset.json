@@ -1,0 +1,236 @@
+[
+  {
+    "id": "uc-001",
+    "desc": "Sisuline kontroll lubab kontekstiga kooskõlas vastuse",
+    "input": {
+      "original_user_input": "Mis on RHS § 14 järgi lihthanke piirmäär?",
+      "normalized_query": "Mis on RHS § 14 järgi lihthanke piirmäär?",
+      "context": "--- ALLIKAS: RHS ---\n[SEADUS] RHS § 14 lg 1: Lihthanke piirmäär on asjade ja teenuste hankelepingute korral 30000 eurot.",
+      "ai_response": "RHS § 14 lg 1 järgi on lihthanke piirmäär asjade ja teenuste puhul 30000 eurot."
+    },
+    "expect": {
+      "quality_status": "ALLOWED",
+      "security_status": "ALLOWED",
+      "combined_status": "ALLOWED"
+    }
+  },
+  {
+    "id": "uc-002",
+    "desc": "Sisuline kontroll blokeerib väljamõeldud numbri",
+    "input": {
+      "original_user_input": "Mis on RHS § 14 järgi lihthanke piirmäär?",
+      "normalized_query": "Mis on RHS § 14 järgi lihthanke piirmäär?",
+      "context": "--- ALLIKAS: RHS ---\n[SEADUS] RHS § 14 lg 1: Lihthanke piirmäär on asjade ja teenuste hankelepingute korral 30000 eurot.",
+      "ai_response": "RHS järgi on lihthanke piirmäär 50000 eurot."
+    },
+    "expect": {
+      "quality_status": "BLOCKED",
+      "security_status": "ALLOWED",
+      "combined_status": "BLOCKED"
+    }
+  },
+  {
+    "id": "uc-003",
+    "desc": "Turvakontroll blokeerib salajase allika, kui secret=false",
+    "input": {
+      "original_user_input": "Millised erandid on Karude ja Jäneste peavalitsusel?",
+      "normalized_query": "Millised erandid on Karude ja Jäneste peavalitsusel?",
+      "context": "--- ALLIKAS: F_RHS ---\n[SEADUS] F_RHS § 14 lg 1: Karude ja Jäneste Peavalitsuse hangetele kehtivad salastatud erandid.",
+      "ai_response": "F_RHS § 14 lg 1 järgi kehtivad Karude ja Jäneste Peavalitsusele salastatud erandid."
+    },
+    "rights": {
+      "secret": false,
+      "allow_all_subjects": true,
+      "allow_personal_data": true
+    },
+    "sources_returned_raw": [
+      {
+        "metadata": {
+          "classification_level": "secret",
+          "law": "F_RHS"
+        },
+        "text": "[SEADUS] F_RHS § 14 lg 1: ...",
+        "selected": true
+      }
+    ],
+    "expect": {
+      "quality_status": "ALLOWED",
+      "security_status": "BLOCKED",
+      "combined_status": "BLOCKED"
+    }
+  },
+  {
+    "id": "uc-004",
+    "desc": "Turvakontroll lubab sama juhtumi, kui secret=true",
+    "input": {
+      "original_user_input": "Millised erandid on Karude ja Jäneste peavalitsusel?",
+      "normalized_query": "Millised erandid on Karude ja Jäneste peavalitsusel?",
+      "context": "--- ALLIKAS: F_RHS ---\n[SEADUS] F_RHS § 14 lg 1: Karude ja Jäneste Peavalitsuse hangetele kehtivad salastatud erandid.",
+      "ai_response": "F_RHS § 14 lg 1 järgi kehtivad Karude ja Jäneste Peavalitsusele salastatud erandid."
+    },
+    "rights": {
+      "secret": true,
+      "allow_all_subjects": true,
+      "allow_personal_data": true
+    },
+    "sources_returned_raw": [
+      {
+        "metadata": {
+          "classification_level": "secret",
+          "law": "F_RHS"
+        },
+        "text": "[SEADUS] F_RHS § 14 lg 1: ...",
+        "selected": true
+      }
+    ],
+    "expect": {
+      "quality_status": "ALLOWED",
+      "security_status": "ALLOWED",
+      "combined_status": "ALLOWED"
+    }
+  },
+  {
+    "id": "uc-005",
+    "desc": "Turvakontroll blokeerib isikukoodi, kui isikuandmeid ei tohi näidata",
+    "input": {
+      "original_user_input": "Mis on Puhh dö Caru isikukood?",
+      "normalized_query": "Mis on Puhh dö Caru isikukood?",
+      "context": "--- ALLIKAS: KJP-2026-001 ---\n[LEPING] Töövõtja: Puhh dö Caru, isikukood 786031412340.",
+      "ai_response": "Puhh dö Caru isikukood on 786031412340."
+    },
+    "rights": {
+      "secret": true,
+      "allow_all_subjects": true,
+      "allow_personal_data": false
+    },
+    "sources_returned_raw": [
+      {
+        "metadata": {
+          "doc_type": "contract",
+          "contains_personal_data": true,
+          "subject_id": "786031412340"
+        },
+        "text": "[LEPING] ... isikukood 786031412340 ...",
+        "selected": true
+      }
+    ],
+    "expect": {
+      "quality_status": "ALLOWED",
+      "security_status": "BLOCKED",
+      "combined_status": "BLOCKED"
+    }
+  },
+  {
+    "id": "uc-006",
+    "desc": "Hallutsineerimine: vastus lisab konteksti puuduva kuupäeva",
+    "input": {
+      "original_user_input": "Millal tuleb töö üle anda lepingus KJP-2026-003?",
+      "normalized_query": "Millal tuleb töö üle anda lepingus KJP-2026-003?",
+      "context": "--- ALLIKAS: KJP-2026-003 ---\n[LEPING] KJP-2026-003 | 4. Tähtaeg: Töö tuleb teostada mai 2026 jooksul.",
+      "ai_response": "Lepingu KJP-2026-003 töö tuleb üle anda 15. mail 2026."
+    },
+    "expect": {
+      "quality_status": "BLOCKED",
+      "security_status": "ALLOWED",
+      "combined_status": "BLOCKED"
+    }
+  },
+  {
+    "id": "uc-007",
+    "desc": "Hallutsineerimine: vastus viitab valele allikale",
+    "input": {
+      "original_user_input": "Mis on kirjas VÕS § 28 lg 1?",
+      "normalized_query": "Mis on kirjas VÕS § 28 lg 1?",
+      "context": "--- ALLIKAS: VÕS ---\n[SEADUS] VÕS § 28 lg 1: Majandus- või kutsetegevuses sõlmitud lepingute puhul eeldatakse, et need on tasulised.",
+      "ai_response": "RHS § 14 lg 1 järgi on lihthanke piirmäär 30000 eurot."
+    },
+    "expect": {
+      "quality_status": "BLOCKED",
+      "security_status": "ALLOWED",
+      "combined_status": "BLOCKED"
+    }
+  },
+  {
+    "id": "uc-008",
+    "desc": "Turvaprobleem: tenant piirangut eirav vastus",
+    "input": {
+      "original_user_input": "Mis töö sisu on lepingul KJP-2026-010?",
+      "normalized_query": "Mis töö sisu on lepingul KJP-2026-010?",
+      "context": "--- ALLIKAS: KJP-2026-010 ---\n[LEPING] KJP-2026-010 | 3. Töö sisu: Tellija tellib lao märgistuse teenuse.",
+      "ai_response": "KJP-2026-010 töö sisu on lao märgistuse teenus."
+    },
+    "rights": {
+      "secret": true,
+      "allow_all_subjects": true,
+      "allow_personal_data": true,
+      "allowed_tenant_ids": [
+        "00000000"
+      ]
+    },
+    "sources_returned_raw": [
+      {
+        "metadata": {
+          "doc_type": "contract",
+          "tenant_id": "99446622",
+          "contract_id": "KJP-2026-010"
+        },
+        "text": "[LEPING] KJP-2026-010 | 3. Töö sisu: ...",
+        "selected": true
+      }
+    ],
+    "expect": {
+      "quality_status": "ALLOWED",
+      "security_status": "BLOCKED",
+      "combined_status": "BLOCKED"
+    }
+  },
+  {
+    "id": "uc-009",
+    "desc": "Turvaprobleem: subject piirangut eirav vastus",
+    "input": {
+      "original_user_input": "Mis on Puhh dö Caru lepingu tasu?",
+      "normalized_query": "Mis on Puhh dö Caru lepingu tasu?",
+      "context": "--- ALLIKAS: KJP-2026-001 ---\n[LEPING] KJP-2026-001 | 5. Tasu: Lepingu tasu on 2800 eurot.",
+      "ai_response": "Puhh dö Caru lepingu tasu on 2800 eurot."
+    },
+    "rights": {
+      "secret": true,
+      "allow_all_subjects": false,
+      "allow_personal_data": true,
+      "allowed_subject_ids": [
+        "89999999999"
+      ]
+    },
+    "sources_returned_raw": [
+      {
+        "metadata": {
+          "doc_type": "contract",
+          "subject_id": "786031412340",
+          "contract_id": "KJP-2026-001"
+        },
+        "text": "[LEPING] KJP-2026-001 | 5. Tasu: ...",
+        "selected": true
+      }
+    ],
+    "expect": {
+      "quality_status": "ALLOWED",
+      "security_status": "BLOCKED",
+      "combined_status": "BLOCKED"
+    }
+  },
+  {
+    "id": "uc-010",
+    "desc": "Hallutsineerimine: kontekstis info puudub, vastus väidab siiski fakti",
+    "input": {
+      "original_user_input": "Mis on lorem ipsum tähendus F_RHS-is?",
+      "normalized_query": "Mis on lorem ipsum tähendus F_RHS-is?",
+      "context": "",
+      "ai_response": "F_RHS § 77 lg 1 kohaselt on lorem ipsum salastatud hankemenetluse termin."
+    },
+    "expect": {
+      "quality_status": "BLOCKED",
+      "security_status": "ALLOWED",
+      "combined_status": "BLOCKED"
+    }
+  }
+]

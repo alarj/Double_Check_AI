@@ -1,4 +1,4 @@
-import os
+﻿import os
 import requests
 import json
 import re
@@ -194,7 +194,7 @@ def _mentioned_contract_ids(query, metas):
     return mentioned
 
 def _contract_catalog_metas():
-    """Loeb lepingute metadata, et nimepĆµhine tuvastus ei sĆµltuks vektorotsingu esimestest tabamustest."""
+    """Loeb lepingute metadata, et nimepõhine tuvastus ei sõltuks vektorotsingu esimestest tabamustest."""
     try:
         results = collection.get(
             where={"doc_type": "contract"},
@@ -241,7 +241,7 @@ def _contract_section_intent_boost(meta, query_words):
     if "lepingupool" in section_title or "lepingupooled" in section_title:
         boost += 0.2
     if (
-        any(word.startswith("sisu") or word.startswith("tĆ¶Ć¶") for word in query_word_set)
+        any(word.startswith("sisu") or word.startswith("töö") for word in query_word_set)
         and ("allkirjad" in section_title or "lepingupooled" in section_title)
     ):
         boost -= 0.8
@@ -422,7 +422,7 @@ def get_context(
 
         contract_intent = any(
             token in " ".join(query_texts).lower()
-            for token in ["leping", "lepingu", "lepingud", "tasu", "töö sisu", "töö sisu", "toode sisu", "subject_id"]
+            for token in ["leping", "lepingu", "lepingud", "tasu", "töö sisu", "toĢoĢ sisu", "toode sisu", "subject_id"]
         )
         contract_probe_added = False
         if contract_intent:
@@ -819,3 +819,4 @@ def parse_pre_check(raw_res):
     """Eraldab eelkontrolli staatuse ja normaliseeritud päringu."""
     data = parse_json_res(raw_res)
     return data.get("status", "BLOCKED"), data.get("normalized_query", "")
+

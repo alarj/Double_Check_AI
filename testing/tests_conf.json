@@ -12,7 +12,34 @@
       "pause_seconds": 0
     },
     "bench-pre-check": 16,
-    "bench-post-check": 16,
-    "normalizer-test": 16
+    "bench-post-check": {
+      "api_url": "http://api:8000/post-check",
+      "api_user": "admin",
+      "api_pass": "parool",
+      "dataset_file": "/testing/post_check_dataset.json",
+      "log_file": "/testing/bench-post-check-log.json",
+      "threads": 24,
+      "timeout": 360,
+      "request_timeout_margin_sec": 5,
+      "models": [
+        "gemma2:2b",
+        "mistral",
+        "llama3:8b",
+        "phi3"
+      ]
+    },
+    "normalizer-test": 16,
+    "post-check-use-cases": {
+      "api_base_url": "http://api:8000",
+      "api_user": "admin",
+      "api_pass": "parool",
+      "dataset_file": "/testing/post_check_use_cases_dataset.json",
+      "log_file": "/testing/post-check-use-cases-log.json",
+      "threads": 24,
+      "timeout": 120,
+      "quality_model": "gemma2:2b",
+      "security_model": "gemma2:2b",
+      "run_combined_check": true
+    }
   }
 }

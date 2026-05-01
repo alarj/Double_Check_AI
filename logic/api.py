@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, status, Query
+﻿from fastapi import FastAPI, Depends, HTTPException, status, Query
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 import logic_core
 import json
@@ -25,6 +25,7 @@ UI_LOG_FILE = "/app/ai_turvakiht.log"
 TEST_LOG_FILES = {
     "test-pre-check": "/testing/bench-pre-check-log.json",
     "test-post-check": "/testing/bench-post-check-log.json",
+    "test-post-check-use-cases": "/testing/post-check-use-cases-log.json",
     "test-llm": "/testing/llm-test-log.json",
     "test-retrieval": "/testing/retr-test-log.json",
     "test-stability": "/testing/stability-test-log.json",
@@ -90,11 +91,17 @@ class PostCheckRequest(BaseModel):
     normalized_query: Optional[str] = ""
     # Kontekst, mille alusel põhipäring LLM-s tehti (RAG kontekst)
     context: Optional[str] = ""
-    # Backward compatibility varasema kliendi jaoks
-    original_query: Optional[str] = None
     model: str = "gemma2:2b"
+    quality_model: Optional[str] = None
+    security_model: Optional[str] = None
     timeout: Optional[int] = 90
     threads: Optional[int] = 4
+    secret: Optional[bool] = False
+    allowed_subject_ids: List[str] = Field(default_factory=list)
+    allowed_tenant_ids: List[str] = Field(default_factory=list)
+    allow_all_subjects: Optional[bool] = False
+    allow_personal_data: Optional[bool] = False
+    sources_returned_raw: List[dict] = Field(default_factory=list)
 
 # --- LOGIMINE ---
 def log_api_call(endpoint: str, status_code: int, duration: float, user: str, extra_data: dict = None):
@@ -416,64 +423,337 @@ async def run_retrieval(req: RetrievalRequest, user: str = Depends(authenticate)
         log_api_call("/retrieval", 500, 0, user, {"query": req.query, "error": str(e)})
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/post-check", tags=["Valideerimine"])
+
+def _run_quality_post_check(req: PostCheckRequest):
+    # Hard rule: tühi kontekst + sisuline vastus => BLOCKED
+    if not (req.context or "").strip():
+        if (req.ai_response or "").strip() != "Esitatud kontekstis info puudub.":
+            return {
+                "model": "hard-rule",
+                "status": "BLOCKED",
+                "reason": "Kontekst puudub, kuid vastus sisaldab sisulisi väiteid.",
+                "duration": 0.0,
+                "prompt": "",
+                "raw_response": "",
+            }
+
+    # Hard rule: vastus ei tohi lisada uusi arvulisi konkreetseid fakte,
+    # mida kontekstis ei ole (nt päevad, summad, numbrid, viitenumbrid).
+    def _extract_numeric_tokens(text: str) -> set:
+        if not text:
+            return set()
+        tokens = set()
+        for raw in re.findall(r"\d+(?:[.,]\d+)?", text):
+            normalized = raw.replace(",", ".").strip()
+            if normalized:
+                tokens.add(normalized)
+        return tokens
+
+    context_numbers = _extract_numeric_tokens(req.context or "")
+    response_numbers = _extract_numeric_tokens(req.ai_response or "")
+    new_numbers = sorted(x for x in response_numbers if x not in context_numbers)
+    if new_numbers:
+        return {
+            "model": "hard-rule",
+            "status": "BLOCKED",
+            "reason": f"Vastus lisab kontekstis puuduvaid arvulisi fakte: {', '.join(new_numbers[:5])}.",
+            "duration": 0.0,
+            "prompt": "",
+            "raw_response": "",
+        }
+
+    quality_model = (req.quality_model or req.model or "gemma2:2b").strip()
+    quality_template = logic_core.PROMPTS.get("POST_CHECK_PROMPT", "{u_input}\\n{main_res}")
+    quality_prompt = (
+        quality_template
+        .replace("{u_input}", req.original_user_input)
+        .replace("{context}", (req.context or "").strip() or "Puudub")
+        .replace("{main_res}", req.ai_response)
+    )
+    quality_prompt = quality_prompt.replace(
+        "{normalized_query}",
+        (req.normalized_query or "").strip() or req.original_user_input,
+    )
+    quality_start = time.time()
+    quality_raw = logic_core.ask_ollama(quality_model, quality_prompt, req.threads, req.timeout)
+    quality_duration_ms = round((time.time() - quality_start) * 1000, 2)
+    quality_parsed = logic_core.parse_json_res(quality_raw)
+    quality_status = str(quality_parsed.get("status", "BLOCKED")).upper()
+    quality_reason = quality_parsed.get("reason", "")
+    return {
+        "model": quality_model,
+        "status": quality_status,
+        "reason": quality_reason,
+        "duration": quality_duration_ms,
+        "prompt": quality_prompt,
+        "raw_response": quality_raw,
+    }
+
+
+def _run_security_post_check(req: PostCheckRequest):
+    def _is_secret_candidate(item: dict) -> bool:
+        meta = (item or {}).get("metadata", {}) or {}
+        level = str(meta.get("classification_level", "")).strip().lower()
+        return level == "secret"
+
+    def _extract_sensitive_ids(candidates: List[dict]) -> set:
+        ids = set()
+        for item in candidates or []:
+            meta = (item or {}).get("metadata", {}) or {}
+            for key in ("subject_id", "counterparty_id", "personal_id"):
+                value = str(meta.get(key, "")).strip()
+                if value:
+                    ids.add(value)
+        return ids
+
+    def _contains_unmasked_personal_id(text: str, known_ids: set) -> bool:
+        if not text:
+            return False
+        if "***" in text:
+            masked_text = text.replace("***", "")
+        else:
+            masked_text = text
+
+        # 1) Kui teame konkreetseid ID-sid metadatast, kontrollime neid otse.
+        for pid in known_ids:
+            if pid and pid in masked_text:
+                return True
+
+        # 2) Mustrikontroll: "isikukood <id>" või "personal id <id>" tüüpi lekke tuvastus.
+        pattern = re.compile(r"(isikukood|personal\s*id)\s*[:#]?\s*([A-Za-z0-9\-]{6,20})", re.IGNORECASE)
+        return bool(pattern.search(masked_text))
+
+    candidates = req.sources_returned_raw or []
+    ai_response_text = req.ai_response or ""
+
+    # Hard rule 1: secret=false korral ei tohi vastus kasutada salajast konteksti.
+    if not bool(req.secret):
+        secret_selected = any(
+            _is_secret_candidate(item) and bool((item or {}).get("selected", False))
+            for item in candidates
+        )
+        if secret_selected and ai_response_text.strip() != "Esitatud kontekstis info puudub.":
+            return {
+                "model": "hard-rule",
+                "status": "BLOCKED",
+                "reason": "Vastus kasutab salajast infot, kuigi secret õigus puudub.",
+                "duration": 0.0,
+                "prompt": "",
+                "raw_response": "",
+            }
+
+    # Hard rule 2: allow_personal_data=false korral ei tohi vastus näidata maskeerimata isikuandmeid.
+    if not bool(req.allow_personal_data):
+        known_ids = _extract_sensitive_ids(candidates)
+        if _contains_unmasked_personal_id(ai_response_text, known_ids):
+            return {
+                "model": "hard-rule",
+                "status": "BLOCKED",
+                "reason": "Vastus sisaldab maskeerimata isikuandmeid, kuigi see pole lubatud.",
+                "duration": 0.0,
+                "prompt": "",
+                "raw_response": "",
+            }
+
+    # Hard rule 3: allow_all_subjects=false ja allowed_subject_ids piirab ligipääsu.
+    if not bool(req.allow_all_subjects):
+        allowed_subjects = {
+            str(x).strip() for x in (req.allowed_subject_ids or []) if str(x).strip()
+        }
+        if allowed_subjects:
+            subject_selected = False
+            subject_blocked = False
+            for item in candidates:
+                if not bool((item or {}).get("selected", False)):
+                    continue
+                meta = (item or {}).get("metadata", {}) or {}
+                subject_id = str(meta.get("subject_id", "")).strip()
+                if not subject_id:
+                    continue
+                subject_selected = True
+                if subject_id not in allowed_subjects:
+                    subject_blocked = True
+                    break
+            if subject_selected and subject_blocked:
+                return {
+                    "model": "hard-rule",
+                    "status": "BLOCKED",
+                    "reason": "Vastus kasutab subject_id infot, millele kasutajal ligipääs puudub.",
+                    "duration": 0.0,
+                    "prompt": "",
+                    "raw_response": "",
+                }
+
+    # Hard rule 4: allowed_tenant_ids piirab ligipääsu tenantile.
+    allowed_tenants = {
+        str(x).strip() for x in (req.allowed_tenant_ids or []) if str(x).strip()
+    }
+    if allowed_tenants:
+        tenant_selected = False
+        tenant_blocked = False
+        for item in candidates:
+            if not bool((item or {}).get("selected", False)):
+                continue
+            meta = (item or {}).get("metadata", {}) or {}
+            tenant_id = str(meta.get("tenant_id", "")).strip()
+            if not tenant_id:
+                continue
+            tenant_selected = True
+            if tenant_id not in allowed_tenants:
+                tenant_blocked = True
+                break
+        if tenant_selected and tenant_blocked:
+            return {
+                "model": "hard-rule",
+                "status": "BLOCKED",
+                "reason": "Vastus kasutab tenant_id infot, millele kasutajal ligipääs puudub.",
+                "duration": 0.0,
+                "prompt": "",
+                "raw_response": "",
+            }
+
+    security_model = (req.security_model or req.model or "gemma2:2b").strip()
+    security_template = logic_core.PROMPTS.get(
+        "POST_CHECK_SECURITY_PROMPT",
+        "Respond ONLY with JSON: {\"status\":\"ALLOWED\",\"reason\":\"fallback\"}",
+    )
+    security_prompt = (
+        security_template
+        .replace("{u_input}", req.original_user_input)
+        .replace("{normalized_query}", (req.normalized_query or "").strip() or req.original_user_input)
+        .replace("{context}", (req.context or "").strip() or "Puudub")
+        .replace("{main_res}", req.ai_response)
+        .replace("{secret}", str(bool(req.secret)).lower())
+        .replace("{allow_all_subjects}", str(bool(req.allow_all_subjects)).lower())
+        .replace("{allow_personal_data}", str(bool(req.allow_personal_data)).lower())
+        .replace("{allowed_subject_ids}", json.dumps(req.allowed_subject_ids or [], ensure_ascii=False))
+        .replace("{allowed_tenant_ids}", json.dumps(req.allowed_tenant_ids or [], ensure_ascii=False))
+        .replace("{sources_returned_raw}", json.dumps(req.sources_returned_raw or [], ensure_ascii=False))
+    )
+    security_start = time.time()
+    security_raw = logic_core.ask_ollama(security_model, security_prompt, req.threads, req.timeout)
+    security_duration_ms = round((time.time() - security_start) * 1000, 2)
+    security_parsed = logic_core.parse_json_res(security_raw)
+    security_status = str(security_parsed.get("status", "BLOCKED")).upper()
+    security_reason = security_parsed.get("reason", "")
+    return {
+        "model": security_model,
+        "status": security_status,
+        "reason": security_reason,
+        "duration": security_duration_ms,
+        "prompt": security_prompt,
+        "raw_response": security_raw,
+    }
+
+
+@app.post(
+    "/post-check-quality",
+    tags=["Valideerimine"],
+    summary="Post-check sisuline kontroll (soovituslik)",
+    description="Soovituslik endpoint post-check sisulise kontrolli jaoks. Kontrollib, kas vastus on konteksti- ja küsimusepõhine.",
+)
+async def post_check_quality(req: PostCheckRequest, user: str = Depends(authenticate)):
+    start_time = time.time()
+    try:
+        if not req.original_user_input:
+            raise HTTPException(status_code=422, detail="Missing required field: original_user_input")
+        quality = _run_quality_post_check(req)
+        duration = time.time() - start_time
+        response_data = {
+            "status": quality["status"],
+            "reason": quality["reason"],
+            "analysis": quality["reason"],
+            "duration": round(duration * 1000, 2),
+            "check": quality,
+        }
+        log_api_call("/post-check-quality", 200, duration, user, response_data)
+        return response_data
+    except Exception as e:
+        log_api_call("/post-check-quality", 500, 0, user, {"error": str(e)})
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post(
+    "/post-check-security",
+    tags=["Valideerimine"],
+    summary="Post-check turvakontroll (soovituslik)",
+    description="Soovituslik endpoint post-check turvakontrolli jaoks. Kontrollib, kas vastus järgib ligipääsu- ja andmereegleid.",
+)
+async def post_check_security(req: PostCheckRequest, user: str = Depends(authenticate)):
+    start_time = time.time()
+    try:
+        if not req.original_user_input:
+            raise HTTPException(status_code=422, detail="Missing required field: original_user_input")
+        security = _run_security_post_check(req)
+        duration = time.time() - start_time
+        response_data = {
+            "status": security["status"],
+            "reason": security["reason"],
+            "analysis": security["reason"],
+            "duration": round(duration * 1000, 2),
+            "check": security,
+        }
+        log_api_call("/post-check-security", 200, duration, user, response_data)
+        return response_data
+    except Exception as e:
+        log_api_call("/post-check-security", 500, 0, user, {"error": str(e)})
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post(
+    "/post-check",
+    tags=["Valideerimine"],
+    summary="Post-check koondteenus (legacy)",
+    description="Legacy koondendpoint, mis käivitab nii sisulise kui turvakontrolli. Uues kasutuses eelista eraldi endpoint'e: /post-check-quality ja /post-check-security.",
+)
 async def post_check(req: PostCheckRequest, user: str = Depends(authenticate)):
     """
-    Kontrollib AI vastuse vastavust algsele küsimusele (hallutsinatsioonide vältimine).
+    Koondteenus: käivitab nii sisulise kui turvakontrolli ja tagastab ühise otsuse.
     """
     start_time = time.time()
     start_time_str = time.strftime("%H:%M:%S")
     try:
-        # Toetame vanemat kliendilepingut (original_query) ilma 422 errorita.
-        if (not req.original_user_input) and req.original_query:
-            req.original_user_input = req.original_query
         if not req.original_user_input:
-            raise HTTPException(status_code=422, detail="Missing required field: original_user_input (or legacy original_query)")
+            raise HTTPException(status_code=422, detail="Missing required field: original_user_input")
 
-        # Võtame õige võtmega prompti failist
-        sys_prompt = logic_core.PROMPTS.get("POST_CHECK_PROMPT", "{u_input}\n{main_res}")
-        # Asendame kohamärgised vastavalt failile prompts.json
-        full_prompt = (
-            sys_prompt
-            .replace("{u_input}", req.original_user_input)
-            .replace("{context}", (req.context or "").strip() or "Puudub")
-            .replace("{main_res}", req.ai_response)
-        )
-        # Kui prompt kasutab lisa-kohamärke, täidame ka need (kui olemas)
-        full_prompt = full_prompt.replace("{normalized_query}", (req.normalized_query or "").strip() or req.original_user_input)
+        quality = _run_quality_post_check(req)
+        security = _run_security_post_check(req)
 
-        result = logic_core.ask_ollama(
-            req.model,
-            full_prompt,
-            req.threads,
-            req.timeout
-        )
+        final_status = "BLOCKED" if ("BLOCKED" in {quality["status"], security["status"]}) else "ALLOWED"
+        reason_parts = []
+        if quality["status"] == "BLOCKED" and quality["reason"]:
+            reason_parts.append(f"Sisuline kontroll: {quality['reason']}")
+        if security["status"] == "BLOCKED" and security["reason"]:
+            reason_parts.append(f"Turvakontroll: {security['reason']}")
+        final_reason = " | ".join(reason_parts)
         duration = time.time() - start_time
-        
-        # Parsime Ollama string vastuse reaalseks JSONiks
-        parsed_result = logic_core.parse_json_res(result)
-        
+
         response_data = {
             "model": req.model,
-            "prompt": full_prompt,
+            "quality_model": quality["model"],
+            "security_model": security["model"],
             "start_time": start_time_str,
-            "status": parsed_result.get("status", "BLOCKED"),
-            "reason": parsed_result.get("reason", ""),
-            "analysis": parsed_result.get("analysis", parsed_result.get("reason", "")),
+            "status": final_status,
+            "reason": final_reason,
+            "analysis": final_reason or ("ALLOWED" if final_status == "ALLOWED" else ""),
+            "quality_status": quality["status"],
+            "security_status": security["status"],
             "duration": round(duration * 1000, 2),
-            "raw_response": result,
             "ai_response": req.ai_response,
             "original_user_input": req.original_user_input,
             "normalized_query": req.normalized_query or "",
             "context": req.context or "",
+            "checks": {
+                "quality": quality,
+                "security": security,
+            },
         }
-        
+
         log_api_call("/post-check", 200, duration, user, response_data)
         return response_data
     except Exception as e:
         log_api_call("/post-check", 500, 0, user, {"error": str(e)})
         raise HTTPException(status_code=500, detail=str(e))
-
 @app.get("/logs", tags=["Süsteem"])
 def get_logs(
     user: str = Depends(authenticate), 
@@ -484,6 +764,7 @@ def get_logs(
             "ui",
             "test-pre-check",
             "test-post-check",
+            "test-post-check-use-cases",
             "test-llm",
             "test-retrieval",
             "test-stability",
@@ -610,3 +891,5 @@ if __name__ == "__main__":
     import uvicorn
     # Käivitab serveri pordil 8000
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+

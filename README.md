@@ -273,6 +273,9 @@ Rakendus oskab kasutada kuni 3 astmelist protsessi:
 2. **Põhipäring**  genereerib vastuse
 3. **Järelkontroll** kontrollib väljundit, et vältida tundliku info leket või ebasobivat sisu.
 
+Post-check reeglimudeli tehniline spetsifikatsioon asub failis:
+* **`docs/post_check_reeglimudel.md`**
+
 ## Estonian normaliseerija mudel 
 Normaliseerimise üks variant on kasutada mõnda hästi eesti keelt valdavat mudelit, mitte valmis mudeleid.
 Tiimiliikmed ei pea mudelit ise GGUF-failist looma ega hoidma oma serveris `models/` kaustas suuri mudelifaile.
@@ -331,6 +334,7 @@ Süsteemis on olemas järgmised testid, mis asuvad /testing/ kataloogis:
 
 * **bench-pre-check.py** -- pre-check test, testilood failis pre_check_dataset.json
 * **bench-post-check.py** -- post-check test, testilood failis post_check_dataset.json
+* **test_post_check_use_cases.py** -- post-check kasutusjuhtude test (eraldi 4a sisuline + 4b turvakontroll, soovi korral ka koondkontroll), testilood failis post_check_use_cases_dataset.json ja testi tööparameetrid failis tests_conf.json (`tests.post-check-use-cases`)
 * **retr-test.py** -- retrieval (vektorbaasi päring) test, testilood failis retrieval_dataset.json
 * **llm-test.py** -- põhipäringu test, testilood failis main_llm_dataset.json
 * **stability-test.py** -- kordab sama RAG-päringut ning kontrollib, kas retrieval'i kontekst ja selle konteksti põhjal antud põhipäringu vastus püsivad samad. Pre-check, normaliseerimine ja post-check ei ole selle testi osa. Vaikimisi küsimus, korduste arv, threadide arv, `timeout`, `n_results`, `max_context_blocks` ja `pause_seconds` tulevad failist `/testing/tests_conf.json`; käsurea parameetriga saab neid jooksu ajaks üle kirjutada.

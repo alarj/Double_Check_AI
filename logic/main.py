@@ -1,4 +1,4 @@
-import base64
+﻿import base64
 import json
 import os
 import subprocess
@@ -192,6 +192,79 @@ def fetch_normalized_query_via_api(user_input, model, threads, timeout, gemini_a
     except Exception as e:
         return None, str(e)
 
+def _build_postcheck_payload(
+    ai_response,
+    original_user_input,
+    normalized_query,
+    context,
+    model,
+    threads,
+    timeout,
+    secret=False,
+    allowed_subject_ids=None,
+    allowed_tenant_ids=None,
+    allow_all_subjects=False,
+    allow_personal_data=False,
+    sources_returned_raw=None,
+):
+    return {
+        "ai_response": ai_response,
+        "original_user_input": original_user_input,
+        "normalized_query": normalized_query or "",
+        "context": context or "",
+        "model": model,
+        "threads": int(threads),
+        "timeout": int(timeout),
+        "secret": bool(secret),
+        "allowed_subject_ids": allowed_subject_ids or [],
+        "allowed_tenant_ids": allowed_tenant_ids or [],
+        "allow_all_subjects": bool(allow_all_subjects),
+        "allow_personal_data": bool(allow_personal_data),
+        "sources_returned_raw": sources_returned_raw or [],
+    }
+
+
+def fetch_postcheck_quality_via_api(payload, timeout):
+    """Toob sisulise post-check tulemuse REST API /post-check-quality endpointist."""
+    try:
+        auth_token = base64.b64encode(f"{API_USER}:{API_PASSWORD}".encode("utf-8")).decode("utf-8")
+        body = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            f"{API_BASE_URL}/post-check-quality",
+            data=body,
+            headers={
+                "Authorization": f"Basic {auth_token}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=int(timeout) + 60) as res:
+            data = json.loads(res.read().decode("utf-8"))
+            return data, None
+    except Exception as e:
+        return None, str(e)
+
+
+def fetch_postcheck_security_via_api(payload, timeout):
+    """Toob turvalisuse post-check tulemuse REST API /post-check-security endpointist."""
+    try:
+        auth_token = base64.b64encode(f"{API_USER}:{API_PASSWORD}".encode("utf-8")).decode("utf-8")
+        body = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            f"{API_BASE_URL}/post-check-security",
+            data=body,
+            headers={
+                "Authorization": f"Basic {auth_token}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=int(timeout) + 60) as res:
+            data = json.loads(res.read().decode("utf-8"))
+            return data, None
+    except Exception as e:
+        return None, str(e)
+
 
 def run_git_command(args):
     for cwd in (WORKSPACE_DIR, "/app"):
@@ -351,6 +424,7 @@ def render_logs():
             "api",
             "test-pre-check",
             "test-post-check",
+            "test-post-check-use-cases",
             "test-llm",
             "test-retrieval",
             "test-stability",
@@ -365,6 +439,21 @@ def render_logs():
             disabled=st.session_state.processing,
         )
         st.session_state.log_source = log_source
+        log_window_options = [
+            "5 viimast",
+            "10 viimast",
+            "10..20 viimast",
+            "20..30 viimast",
+            "30..40 viimast",
+            "40..50 viimast",
+        ]
+        log_window = st.selectbox(
+            "Kuvatav logivahemik:",
+            options=log_window_options,
+            index=0,
+            disabled=st.session_state.processing,
+            help="Kiiruse huvides kuvatakse korraga ainult valitud vahemik viimastest logikirjetest.",
+        )
 
         logs, err = fetch_logs_via_api(log_source, limit=50)
         if err:
@@ -372,7 +461,26 @@ def render_logs():
         elif not logs:
             st.info("Valitud allikas ei tagastanud logikirjeid.")
         else:
-            for entry_index, entry in enumerate(reversed(logs)):
+            # API tagastab kirjed vanemast uuemani; UI-s kuvame alati uusimad ees.
+            latest_first = list(reversed(logs))
+            window_map = {
+                "5 viimast": (1, 5),
+                "10 viimast": (1, 10),
+                "10..20 viimast": (11, 20),
+                "20..30 viimast": (21, 30),
+                "30..40 viimast": (31, 40),
+                "40..50 viimast": (41, 50),
+            }
+            start_pos, end_pos = window_map.get(log_window, (1, 5))
+            start_idx = max(0, start_pos - 1)
+            end_idx = min(len(latest_first), end_pos)
+            selected_logs = latest_first[start_idx:end_idx]
+            if not selected_logs:
+                st.info("Selles vahemikus kirjeid ei ole.")
+                return
+            st.caption(f"Kuvatud {len(selected_logs)}/{len(latest_first)} kirjet (vahemik: {log_window}).")
+
+            for entry_index, entry in enumerate(selected_logs):
                 if not isinstance(entry, dict):
                     st.text(str(entry))
                     continue
@@ -514,7 +622,12 @@ with st.sidebar:
 
     st.divider()
     st.subheader("Mudelid")
-    pre_check_model_input = st.text_input("Pre-check mudel:", DEFAULT_GUARD, disabled=is_disabled)
+    pre_check_model_input = st.text_input(
+        "Pre-check mudel:",
+        DEFAULT_GUARD,
+        disabled=is_disabled,
+        help="Mudel, mis kontrollib kasutaja sisendi turvalisust ja lubatavust enne retrievali.",
+    )
     normalization_mode_label = st.selectbox(
         "Normaliseerimine:",
         options=[
@@ -548,6 +661,7 @@ with st.sidebar:
                 index=0,
                 disabled=is_disabled,
                 key="normalizer_model_choice",
+                help="Mudel, mis teeb päringu keeleliselt ühtlasemaks enne retrievalit.",
             )
             if normalizer_choice == "Custom...":
                 normalizer_model_input = st.text_input(
@@ -566,8 +680,24 @@ with st.sidebar:
                     disabled=is_disabled,
                     key="gemini_api_key_input",
                 )
-    main_model_input = st.text_input("Põhimudel (RAG):", DEFAULT_MAIN, disabled=is_disabled)
-    post_check_model_input = st.text_input("Post-check mudel:", DEFAULT_GUARD, disabled=is_disabled)
+    main_model_input = st.text_input(
+        "Põhimudel (RAG):",
+        DEFAULT_MAIN,
+        disabled=is_disabled,
+        help="Põhimudel, mis koostab lõppvastuse retrievali konteksti alusel.",
+    )
+    post_check_quality_model_input = st.text_input(
+        "Post-check mudel (sisuline):",
+        DEFAULT_GUARD,
+        disabled=is_disabled,
+        help="Mudel sisulise kontrolli jaoks: hallutsinatsioonid, viited, vastavus küsimusele.",
+    )
+    post_check_security_model_input = st.text_input(
+        "Post-check mudel (turva):",
+        DEFAULT_GUARD,
+        disabled=is_disabled,
+        help="Mudel turvakontrolli jaoks: õigused, salastus, subject/tenant piirangud, maskeerimine.",
+    )
 
     security_option = st.selectbox(
         "Turvalisuse tase:",
@@ -819,7 +949,36 @@ if st.session_state.processing and st.session_state.current_query:
 
             if not context_found:
                 is_safe = False
-                main_answer = "Esitatud kontekstis info puudub."
+                retrieval_debug = (retrieval_data or {}).get("retrieval_debug", {}) or {}
+                filtered_subject_count = int(retrieval_debug.get("filtered_subject_count") or 0)
+                filtered_secret_count = int(retrieval_debug.get("filtered_secret_count") or 0)
+                filtered_tenant_count = int(retrieval_debug.get("filtered_tenant_count") or 0)
+                candidate_count = int(retrieval_debug.get("candidate_count") or 0)
+
+                if candidate_count > 0 and filtered_subject_count >= candidate_count:
+                    if (not allow_all_subjects) and (not allowed_subject_ids):
+                        main_answer = (
+                            "Esitatud kontekstis info puudub. "
+                            "Põhjus: leiti kandidaate, kuid kõik lepinguplokid filtreeriti välja, "
+                            "sest subject_id ligipääs puudub (Luba kõik subjektid on väljas ja Lubatud subject_id-d on tühi)."
+                        )
+                    else:
+                        main_answer = (
+                            "Esitatud kontekstis info puudub. "
+                            "Põhjus: leiti kandidaate, kuid need filtreeriti subject_id reegli alusel."
+                        )
+                elif candidate_count > 0 and filtered_secret_count >= candidate_count:
+                    main_answer = (
+                        "Esitatud kontekstis info puudub. "
+                        "Põhjus: leiti kandidaate, kuid need filtreeriti salastuse reegli alusel."
+                    )
+                elif candidate_count > 0 and filtered_tenant_count >= candidate_count:
+                    main_answer = (
+                        "Esitatud kontekstis info puudub. "
+                        "Põhjus: leiti kandidaate, kuid need filtreeriti tenant_id reegli alusel."
+                    )
+                else:
+                    main_answer = "Esitatud kontekstis info puudub."
                 log_data["final_status"] = "NO_CONTEXT"
             else:
                 update_ui(f"\U0001F9E0 Samm 3/4: Genereerin vastust ({main_model_input}) | päring: {active_query}")
@@ -846,36 +1005,94 @@ if st.session_state.processing and st.session_state.current_query:
                 }
 
                 if any(x in security_option for x in ["järelkontroll", "Täiskontroll"]):
-                    update_ui("\U0001F6E1 Samm 4/4: Teen vastuse kvaliteedikontrolli...")
-                    post_p_template = logic_core.PROMPTS.get("POST_CHECK_PROMPT", "")
-                    visible_u_input = (
-                        u_input
-                        if allow_personal_data
-                        else logic_core.mask_personal_codes_in_text(u_input)
-                    )
-                    post_p = (
-                        post_p_template
-                        .replace("{u_input}", visible_u_input)
-                        .replace("{context}", fetched_context)
-                        .replace("{main_res}", main_answer)
-                    )
-
+                    update_ui("\U0001F6E1 Samm 4a/4: Teen sisulist järelkontrolli...")
                     step_start_post = time.time()
-                    post_res = logic_core.ask_ollama(post_check_model_input, post_p, selected_threads, selected_timeout)
-                    post_data = logic_core.parse_json_res(post_res)
-                    p_status = post_data.get("status", "ALLOWED")
-                    post_analysis = post_data.get("analysis", post_data.get("reason", post_res))
-                    post_duration = round(time.time() - step_start_post, 2)
-                    update_ui(f"\u2705 Samm 4/4 valmis ({post_duration} sek)")
+                    quality_model_effective = (post_check_quality_model_input or DEFAULT_GUARD).strip()
+                    security_model_effective = (post_check_security_model_input or DEFAULT_GUARD).strip()
+                    quality_payload = _build_postcheck_payload(
+                        ai_response=main_answer,
+                        original_user_input=u_input,
+                        normalized_query=active_query,
+                        context=fetched_context,
+                        model=quality_model_effective,
+                        threads=selected_threads,
+                        timeout=selected_timeout,
+                        secret=secret_allowed,
+                        allowed_subject_ids=allowed_subject_ids,
+                        allowed_tenant_ids=allowed_tenant_ids,
+                        allow_all_subjects=allow_all_subjects,
+                        allow_personal_data=allow_personal_data,
+                        sources_returned_raw=(retrieval_data or {}).get("sources_returned_raw", []),
+                    )
+                    quality_data, quality_error = fetch_postcheck_quality_via_api(
+                        payload=quality_payload,
+                        timeout=selected_timeout,
+                    )
+                    if quality_error:
+                        raise RuntimeError(f"Post-check quality API viga: {quality_error}")
+                    quality_status = str((quality_data or {}).get("status", "UNKNOWN"))
+                    quality_duration_ms = float((quality_data or {}).get("duration", 0) or 0)
+                    quality_duration_sec = round(quality_duration_ms / 1000, 2)
+                    quality_model_used = (quality_data or {}).get("model", quality_model_effective)
+                    update_ui(f"\u2705 Samm 4a valmis ({quality_duration_sec} sek) | mudel: {quality_model_used} | staatus: {quality_status}")
+                    update_ui(f"\U0001F512 Samm 4b/4: Teen turvakontrolli...")
+                    security_payload = _build_postcheck_payload(
+                        ai_response=main_answer,
+                        original_user_input=u_input,
+                        normalized_query=active_query,
+                        context=fetched_context,
+                        model=security_model_effective,
+                        threads=selected_threads,
+                        timeout=selected_timeout,
+                        secret=secret_allowed,
+                        allowed_subject_ids=allowed_subject_ids,
+                        allowed_tenant_ids=allowed_tenant_ids,
+                        allow_all_subjects=allow_all_subjects,
+                        allow_personal_data=allow_personal_data,
+                        sources_returned_raw=(retrieval_data or {}).get("sources_returned_raw", []),
+                    )
+                    security_data, security_error = fetch_postcheck_security_via_api(
+                        payload=security_payload,
+                        timeout=selected_timeout,
+                    )
+                    if security_error:
+                        raise RuntimeError(f"Post-check security API viga: {security_error}")
+                    security_status = str((security_data or {}).get("status", "UNKNOWN"))
+                    security_duration_ms = float((security_data or {}).get("duration", 0) or 0)
+                    security_duration_sec = round(security_duration_ms / 1000, 2)
+                    security_model_used = (security_data or {}).get("model", security_model_effective)
+                    update_ui(f"\u2705 Samm 4b valmis ({security_duration_sec} sek) | mudel: {security_model_used} | staatus: {security_status}")
+                    quality_reason = str((quality_data or {}).get("reason", "")).strip()
+                    security_reason = str((security_data or {}).get("reason", "")).strip()
+                    post_analysis = "\n".join(
+                        part for part in [quality_reason, security_reason] if part
+                    ).strip()
+                    if quality_status != "UNKNOWN" or security_status != "UNKNOWN":
+                        post_analysis = (
+                            f"Sisuline kontroll: {quality_status}\n"
+                            f"Turvakontroll: {security_status}\n"
+                            f"{post_analysis}"
+                        ).strip()
+                    p_status = "BLOCKED" if (quality_status == "BLOCKED" or security_status == "BLOCKED") else "ALLOWED"
+                    post_data = {
+                        "status": p_status,
+                        "checks": {
+                            "quality": quality_data or {},
+                            "security": security_data or {},
+                        },
+                        "analysis": post_analysis,
+                    }
+                    post_elapsed = time.time() - step_start_post
+                    post_duration = round(post_elapsed, 2)
+                    update_ui(f"\u2705 Samm 4 kokkuvõte valmis ({post_duration} sek) | sisuline={quality_status}, turva={security_status}")
 
                     log_data["steps"]["post_check"] = {
-                        "model": post_check_model_input,
-                        "prompt": post_p,
+                        "model": f"quality={quality_model_used}; security={security_model_used}",
                         "start_time": logic_core.get_ee_time().strftime("%H:%M:%S"),
                         "status": p_status,
                         "duration": post_duration,
                         "analysis": post_analysis,
-                        "raw_response": post_res,
+                        "api_response": post_data or {},
                     }
                     if p_status == "BLOCKED":
                         is_safe = False
@@ -918,4 +1135,5 @@ render_status_messages()
 render_response()
 render_prompt_editor()
 render_logs()
+
 

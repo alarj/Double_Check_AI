@@ -1,54 +1,62 @@
-import time
 import json
 import os
-import requests
+import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
-from requests.auth import HTTPBasicAuth
 from typing import Any, Dict, List, Optional
 
-# --- KONFIGURATSIOON ---
-API_URL = "http://api:8000/post-check"
-API_USER = "admin"
-API_PASS = "parool"
+import requests
+from requests.auth import HTTPBasicAuth
 
-MODELS_TO_TEST = ["gemma2:2b", "mistral", "llama3:8b", "phi3"]
-
-DATASET_FILE = "/testing/post_check_dataset.json"
-LOG_FILE = "/testing/bench-post-check-log.json"
 TESTS_CONF_FILE = os.getenv("TESTS_CONF_FILE", "/testing/tests_conf.json")
-
-
-def load_test_threads(test_name: str) -> int:
-    server_max = os.cpu_count() or 1
-    configured = 4
-    try:
-        with open(TESTS_CONF_FILE, "r", encoding="utf-8-sig") as f:
-            conf = json.load(f)
-        configured = int(conf.get("tests", {}).get(test_name, conf.get("max_threads", configured)))
-    except Exception:
-        configured = 4
-    return max(1, min(configured, server_max))
-
-
-TEST_THREADS = load_test_threads("bench-post-check")
+TEST_NAME = "bench-post-check"
 
 
 def ee_now_str() -> str:
     return datetime.now(ZoneInfo("Europe/Tallinn")).strftime("%Y-%m-%d %H:%M:%S")
 
 
-def load_dataset() -> List[Dict[str, Any]]:
-    if not os.path.exists(DATASET_FILE):
-        print(f"❌ VIGA: Testandmete faili {DATASET_FILE} ei leitud!")
-        return []
-    try:
-        with open(DATASET_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            return data if isinstance(data, list) else []
-    except Exception as e:
-        print(f"❌ VIGA andmete laadimisel: {e}")
-        return []
+def die(msg: str) -> None:
+    raise RuntimeError(msg)
+
+
+def load_json_file(path: str) -> Any:
+    if not os.path.exists(path):
+        die(f"Faili ei leitud: {path}")
+    with open(path, "r", encoding="utf-8-sig") as f:
+        return json.load(f)
+
+
+def load_conf() -> Dict[str, Any]:
+    conf = load_json_file(TESTS_CONF_FILE)
+    tests = conf.get("tests", {})
+    cfg = tests.get(TEST_NAME)
+    if not isinstance(cfg, dict):
+        die(f"Konfiplokk tests.{TEST_NAME} puudub või pole objekt.")
+    required = [
+        "api_url",
+        "api_user",
+        "api_pass",
+        "dataset_file",
+        "log_file",
+        "threads",
+        "timeout",
+        "request_timeout_margin_sec",
+        "models",
+    ]
+    missing = [k for k in required if k not in cfg]
+    if missing:
+        die(f"Konfis puuduvad väljad tests.{TEST_NAME}: {', '.join(missing)}")
+    if not isinstance(cfg.get("models"), list) or not cfg["models"]:
+        die("tests.bench-post-check.models peab olema mittetühi list.")
+    return cfg
+
+
+def load_dataset(path: str) -> List[Dict[str, Any]]:
+    data = load_json_file(path)
+    if not isinstance(data, list):
+        die("Post-check dataset peab olema JSON list.")
+    return data
 
 
 def append_jsonl(path: str, entry: Dict[str, Any]) -> None:
@@ -64,19 +72,31 @@ def safe_upper(x: Optional[str], default: str) -> str:
 
 
 def run_benchmark() -> None:
-    dataset = load_dataset()
+    cfg = load_conf()
+    dataset = load_dataset(str(cfg["dataset_file"]))
     if not dataset:
-        print("⚠️ Testandmed puuduvad. Lõpetan.")
+        print("Testandmed puuduvad. Lõpetan.")
         return
 
+    api_url = str(cfg["api_url"])
+    api_user = str(cfg["api_user"])
+    api_pass = str(cfg["api_pass"])
+    log_file = str(cfg["log_file"])
+    model_list = [str(m) for m in cfg["models"]]
+    timeout = int(cfg["timeout"])
+    request_timeout_margin_sec = int(cfg["request_timeout_margin_sec"])
+    threads_cfg = int(cfg["threads"])
+    server_max = os.cpu_count() or 1
+    threads = max(1, min(threads_cfg, server_max))
+
     run_timestamp = ee_now_str()
-    print(f"🚀 ALUSTAN POST-CHECK BENCHMARKINGUT ({len(dataset)} juhtumit, {len(MODELS_TO_TEST)} mudelit)")
+    print(f"ALUSTAN POST-CHECK BENCHMARKINGUT ({len(dataset)} juhtumit, {len(model_list)} mudelit) | algus: {run_timestamp}")
+    print(f"threads: {threads} (konf: {threads_cfg}, server_max: {server_max}) | timeout: {timeout}s")
 
     summary_results: List[Dict[str, Any]] = []
 
-    for model in MODELS_TO_TEST:
-        print(f"\n📦 Mudel: {model}")
-
+    for model in model_list:
+        print(f"\nMudel: {model}")
         tp = fp = fn = tn = 0
         latencies: List[float] = []
 
@@ -94,8 +114,8 @@ def run_benchmark() -> None:
                 "context": context,
                 "ai_response": ai_response,
                 "model": model,
-                "timeout": 360,
-                "threads": TEST_THREADS,
+                "timeout": timeout,
+                "threads": threads,
             }
 
             start_time = time.time()
@@ -105,10 +125,10 @@ def run_benchmark() -> None:
 
             try:
                 response = requests.post(
-                    API_URL,
+                    api_url,
                     json=payload,
-                    auth=HTTPBasicAuth(API_USER, API_PASS),
-                    timeout=365,
+                    auth=HTTPBasicAuth(api_user, api_pass),
+                    timeout=timeout + request_timeout_margin_sec,
                 )
                 api_status_code = response.status_code
                 latency = time.time() - start_time
@@ -117,35 +137,33 @@ def run_benchmark() -> None:
                 if response.status_code == 200:
                     res_data = response.json() if response.content else {}
                     predicted_status = safe_upper(res_data.get("status"), "BLOCKED")
-
-                    # Positiivne klass: "BLOCKED" (vigane/ebaturvaline vastus tuvastati)
                     if expected_status == "BLOCKED" and predicted_status == "BLOCKED":
                         tp += 1
-                        print(f"  ✅ {case_id:.<20} [TP] [{latency:.2f}s]")
+                        print(f"  OK   {case_id:.<20} [TP] [{latency:.2f}s]")
                     elif expected_status == "ALLOWED" and predicted_status == "BLOCKED":
                         fp += 1
-                        print(f"  ❌ {case_id:.<20} [FP] [{latency:.2f}s]")
+                        print(f"  FAIL {case_id:.<20} [FP] [{latency:.2f}s]")
                     elif expected_status == "BLOCKED" and predicted_status == "ALLOWED":
                         fn += 1
-                        print(f"  ❌ {case_id:.<20} [FN] [{latency:.2f}s]")
+                        print(f"  FAIL {case_id:.<20} [FN] [{latency:.2f}s]")
                     else:
                         tn += 1
-                        print(f"  ✅ {case_id:.<20} [TN] [{latency:.2f}s]")
+                        print(f"  OK   {case_id:.<20} [TN] [{latency:.2f}s]")
                 else:
                     latency = time.time() - start_time
                     latencies.append(latency)
                     error = f"HTTP {response.status_code}"
-                    print(f"  ⚠️ API VIGA ({case_id}): {response.status_code}")
-
+                    print(f"  API VIGA ({case_id}): {response.status_code}")
             except Exception as e:
                 latency = time.time() - start_time
                 latencies.append(latency)
                 error = str(e)
-                print(f"  🔥 SIDEVIGA ({case_id}): {e}")
+                print(f"  SIDEVIGA ({case_id}): {e}")
 
             log_entry = {
                 "run_timestamp": run_timestamp,
                 "timestamp": ee_now_str(),
+                "test_name": TEST_NAME,
                 "model": model,
                 "case_id": case_id,
                 "expected_status": expected_status,
@@ -161,7 +179,7 @@ def run_benchmark() -> None:
                 "latency_sec": round(latency, 3),
                 "error": error,
             }
-            append_jsonl(LOG_FILE, log_entry)
+            append_jsonl(log_file, log_entry)
 
         precision = (tp / (tp + fp)) if (tp + fp) > 0 else 0.0
         recall = (tp / (tp + fn)) if (tp + fn) > 0 else 0.0
@@ -183,6 +201,7 @@ def run_benchmark() -> None:
             }
         )
 
+    run_finished_at = ee_now_str()
     print("\n" + "=" * 110)
     print(f"{'MUDEL':<18} | {'PRECISION':<9} | {'RECALL':<7} | {'ACCURACY':<8} | {'TP':>3} {'FP':>3} {'FN':>3} {'TN':>3} | {'AVG LAT (s)':>10}")
     print("-" * 110)
@@ -196,10 +215,9 @@ def run_benchmark() -> None:
             f"{r['avg_latency_sec']:>10.3f}"
         )
     print("=" * 110)
-    print(f"💾 Detailne logi (JSONL) lisatud faili: {LOG_FILE}")
+    print(f"Ajavahemik: {run_timestamp} -> {run_finished_at}")
+    print(f"Detailne logi (JSONL) lisatud faili: {log_file}")
 
 
 if __name__ == "__main__":
-    time.sleep(1)
     run_benchmark()
-
