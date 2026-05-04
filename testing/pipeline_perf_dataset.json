@@ -1,0 +1,44 @@
+[
+  {
+    "id": "pp-001",
+    "desc": "Täiskontroll, tavapärane seadusepäring",
+    "user_input": "milline on lihthanke piirmäär",
+    "security_level": "full",
+    "normalization_mode": "external",
+    "secret": false,
+    "allow_all_subjects": false,
+    "allow_personal_data": false,
+    "allowed_subject_ids": [],
+    "allowed_tenant_ids": [],
+    "n_results": 9,
+    "max_context_blocks": 5
+  },
+  {
+    "id": "pp-002",
+    "desc": "Täiskontroll, lepingupäring piiratud subjektidega",
+    "user_input": "milline on Puhh dö Caru lepingu töö sisu ja tasu",
+    "security_level": "full",
+    "normalization_mode": "external",
+    "secret": true,
+    "allow_all_subjects": false,
+    "allow_personal_data": false,
+    "allowed_subject_ids": ["786031412340"],
+    "allowed_tenant_ids": ["99446622"],
+    "n_results": 9,
+    "max_context_blocks": 5
+  },
+  {
+    "id": "pp-003",
+    "desc": "Põhipäring + järelkontroll, salajane lubatud",
+    "user_input": "millised erandid kehtivad Karude ja Jäneste Peavalitsusele",
+    "security_level": "post_only",
+    "normalization_mode": "off",
+    "secret": true,
+    "allow_all_subjects": true,
+    "allow_personal_data": true,
+    "allowed_subject_ids": [],
+    "allowed_tenant_ids": [],
+    "n_results": 9,
+    "max_context_blocks": 5
+  }
+]

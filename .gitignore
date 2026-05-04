@@ -20,7 +20,6 @@ storage/**
 !storage/**/
 !storage/**/.gitkeep
 !storage/raw/laws/
-!storage/raw/laws/**
 !storage/vector_db/
 storage/vector_db/**
 !storage/vector_db/.gitkeep

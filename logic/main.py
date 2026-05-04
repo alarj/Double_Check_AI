@@ -425,6 +425,7 @@ def render_logs():
             "test-pre-check",
             "test-post-check",
             "test-post-check-use-cases",
+            "test-pipeline-perf",
             "test-llm",
             "test-retrieval",
             "test-stability",

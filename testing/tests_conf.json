@@ -40,6 +40,23 @@
       "quality_model": "gemma2:2b",
       "security_model": "gemma2:2b",
       "run_combined_check": true
+    },
+    "pipeline-perf-test": {
+      "api_base_url": "http://api:8000",
+      "api_user": "admin",
+      "api_pass": "parool",
+      "dataset_file": "/testing/pipeline_perf_dataset.json",
+      "log_file": "/testing/pipeline-perf-log.json",
+      "threads": 4,
+      "timeout": 900,
+      "request_timeout_margin_sec": 60,
+      "precheck_model": "gemma2:2b",
+      "normalizer_model": "alarjoeste/estonian-normalizer",
+      "main_model": "llama3:8b",
+      "postcheck_quality_model": "gemma2:2b",
+      "postcheck_security_model": "gemma2:2b",
+      "n_results": 9,
+      "max_context_blocks": 5
     }
   }
 }
