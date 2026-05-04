@@ -10,6 +10,57 @@ from zoneinfo import ZoneInfo
 from pydantic import BaseModel, Field
 from typing import Optional, List, Literal
 
+CONTROL_NUM_PREDICT = 128
+NORMALIZE_NUM_PREDICT = 96
+SECURITY_CONTEXT_MAX_CHARS = 1600
+
+
+def _compact_security_candidates(candidates: List[dict]) -> dict:
+    selected = [c for c in (candidates or []) if bool((c or {}).get("selected", False))]
+    selected_secret = 0
+    selected_subject_ids = set()
+    selected_tenant_ids = set()
+    selected_contract_ids = set()
+    selected_laws = set()
+    filtered_counts = {
+        "secret_not_allowed": 0,
+        "subject_not_allowed": 0,
+        "tenant_not_allowed": 0,
+    }
+
+    for item in candidates or []:
+        reason = str((item or {}).get("filtered_reason", "")).strip()
+        if reason in filtered_counts:
+            filtered_counts[reason] += 1
+
+    for item in selected:
+        meta = (item or {}).get("metadata", {}) or {}
+        if str(meta.get("classification_level", "")).strip().lower() == "secret":
+            selected_secret += 1
+        sid = str(meta.get("subject_id", "")).strip()
+        tid = str(meta.get("tenant_id", "")).strip()
+        cid = str(meta.get("contract_id", "")).strip()
+        law = str(meta.get("law", "")).strip()
+        if sid:
+            selected_subject_ids.add(sid)
+        if tid:
+            selected_tenant_ids.add(tid)
+        if cid:
+            selected_contract_ids.add(cid)
+        if law:
+            selected_laws.add(law)
+
+    return {
+        "candidate_count": len(candidates or []),
+        "selected_count": len(selected),
+        "selected_secret_count": selected_secret,
+        "selected_subject_ids": sorted(selected_subject_ids),
+        "selected_tenant_ids": sorted(selected_tenant_ids),
+        "selected_contract_ids": sorted(selected_contract_ids),
+        "selected_laws": sorted(selected_laws),
+        "filtered_counts": filtered_counts,
+    }
+
 # --- KONFIGURATSIOON ---
 app = FastAPI(
     title="Hankija AI Turvakiht API", 
@@ -150,7 +201,8 @@ async def pre_check(req: PreCheckRequest, user: str = Depends(authenticate)):
             req.model,
             full_prompt,
             req.threads,
-            req.timeout
+            req.timeout,
+            num_predict=CONTROL_NUM_PREDICT,
         )
         duration = time.time() - start_time
         
@@ -174,7 +226,8 @@ async def pre_check(req: PreCheckRequest, user: str = Depends(authenticate)):
                     req.model,
                     sec_full_prompt,
                     req.threads,
-                    req.timeout
+                    req.timeout,
+                    num_predict=CONTROL_NUM_PREDICT,
                 )
                 sec_parsed = logic_core.parse_json_res(sec_result)
                 sec_status = sec_parsed.get("status", "BLOCKED")
@@ -319,12 +372,13 @@ async def run_query(req: MainQueryRequest, user: str = Depends(authenticate)):
             .replace("{query}", req.user_input)
         )
         
-        result = logic_core.ask_ollama(
-            req.model,
-            full_prompt,
-            req.threads,
-            req.timeout
-        )
+            result = logic_core.ask_ollama(
+                req.model,
+                full_prompt,
+                req.threads,
+                req.timeout,
+                num_predict=NORMALIZE_NUM_PREDICT,
+            )
         duration = time.time() - start_time
         
         response_data = {
@@ -468,7 +522,7 @@ def _run_quality_post_check(req: PostCheckRequest):
     quality_prompt = (
         quality_template
         .replace("{u_input}", req.original_user_input)
-        .replace("{context}", (req.context or "").strip() or "Puudub")
+        .replace("{context}", ((req.context or "").strip() or "Puudub")[:SECURITY_CONTEXT_MAX_CHARS])
         .replace("{main_res}", req.ai_response)
     )
     quality_prompt = quality_prompt.replace(
@@ -476,7 +530,13 @@ def _run_quality_post_check(req: PostCheckRequest):
         (req.normalized_query or "").strip() or req.original_user_input,
     )
     quality_start = time.time()
-    quality_raw = logic_core.ask_ollama(quality_model, quality_prompt, req.threads, req.timeout)
+    quality_raw = logic_core.ask_ollama(
+        quality_model,
+        quality_prompt,
+        req.threads,
+        req.timeout,
+        num_predict=CONTROL_NUM_PREDICT,
+    )
     quality_duration_ms = round((time.time() - quality_start) * 1000, 2)
     quality_parsed = logic_core.parse_json_res(quality_raw)
     quality_status = str(quality_parsed.get("status", "BLOCKED")).upper()
@@ -622,17 +682,23 @@ def _run_security_post_check(req: PostCheckRequest):
         security_template
         .replace("{u_input}", req.original_user_input)
         .replace("{normalized_query}", (req.normalized_query or "").strip() or req.original_user_input)
-        .replace("{context}", (req.context or "").strip() or "Puudub")
+        .replace("{context}", ((req.context or "").strip() or "Puudub")[:SECURITY_CONTEXT_MAX_CHARS])
         .replace("{main_res}", req.ai_response)
         .replace("{secret}", str(bool(req.secret)).lower())
         .replace("{allow_all_subjects}", str(bool(req.allow_all_subjects)).lower())
         .replace("{allow_personal_data}", str(bool(req.allow_personal_data)).lower())
         .replace("{allowed_subject_ids}", json.dumps(req.allowed_subject_ids or [], ensure_ascii=False))
         .replace("{allowed_tenant_ids}", json.dumps(req.allowed_tenant_ids or [], ensure_ascii=False))
-        .replace("{sources_returned_raw}", json.dumps(req.sources_returned_raw or [], ensure_ascii=False))
+        .replace("{sources_returned_raw}", json.dumps(_compact_security_candidates(req.sources_returned_raw or []), ensure_ascii=False))
     )
     security_start = time.time()
-    security_raw = logic_core.ask_ollama(security_model, security_prompt, req.threads, req.timeout)
+    security_raw = logic_core.ask_ollama(
+        security_model,
+        security_prompt,
+        req.threads,
+        req.timeout,
+        num_predict=CONTROL_NUM_PREDICT,
+    )
     security_duration_ms = round((time.time() - security_start) * 1000, 2)
     security_parsed = logic_core.parse_json_res(security_raw)
     security_status = str(security_parsed.get("status", "BLOCKED")).upper()
