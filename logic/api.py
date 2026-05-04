@@ -371,14 +371,12 @@ async def run_query(req: MainQueryRequest, user: str = Depends(authenticate)):
             .replace("{context}", req.context)
             .replace("{query}", req.user_input)
         )
-        
-            result = logic_core.ask_ollama(
-                req.model,
-                full_prompt,
-                req.threads,
-                req.timeout,
-                num_predict=NORMALIZE_NUM_PREDICT,
-            )
+        result = logic_core.ask_ollama(
+            req.model,
+            full_prompt,
+            req.threads,
+            req.timeout,
+        )
         duration = time.time() - start_time
         
         response_data = {
