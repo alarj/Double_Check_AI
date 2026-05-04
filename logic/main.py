@@ -90,7 +90,7 @@ def fetch_retrieval_context_via_api(
     query_text,
     original_query=None,
     n_results=9,
-    max_context_blocks=5,
+    max_context_blocks=3,
     secret=False,
     allowed_subject_ids=None,
     allowed_tenant_ids=None,
@@ -616,7 +616,7 @@ with st.sidebar:
         "Kontekstiplokke:",
         1,
         25,
-        5,
+        3,
         disabled=is_disabled,
         help="Mitu parimaks hinnatud kontekstiplokki antakse lõpuks põhimudelile vastuse koostamiseks.",
     )

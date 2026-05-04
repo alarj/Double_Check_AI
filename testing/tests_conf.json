@@ -56,7 +56,7 @@
       "postcheck_quality_model": "gemma2:2b",
       "postcheck_security_model": "gemma2:2b",
       "n_results": 9,
-      "max_context_blocks": 5
+      "max_context_blocks": 3
     }
   }
 }

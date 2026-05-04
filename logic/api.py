@@ -13,6 +13,7 @@ from typing import Optional, List, Literal
 CONTROL_NUM_PREDICT = 128
 NORMALIZE_NUM_PREDICT = 96
 SECURITY_CONTEXT_MAX_CHARS = 1600
+MAIN_NUM_PREDICT = 512
 
 
 def _compact_security_candidates(candidates: List[dict]) -> dict:
@@ -128,7 +129,7 @@ class RetrievalRequest(BaseModel):
     query: str = Field(..., min_length=1)
     original_query: Optional[str] = None
     n_results: Optional[int] = Field(9, ge=1, le=25)
-    max_context_blocks: Optional[int] = Field(5, ge=1, le=25)
+    max_context_blocks: Optional[int] = Field(3, ge=1, le=25)
     secret: Optional[bool] = False
     allowed_subject_ids: List[str] = Field(default_factory=list)
     allowed_tenant_ids: List[str] = Field(default_factory=list)
@@ -376,6 +377,7 @@ async def run_query(req: MainQueryRequest, user: str = Depends(authenticate)):
             full_prompt,
             req.threads,
             req.timeout,
+            num_predict=MAIN_NUM_PREDICT,
         )
         duration = time.time() - start_time
         
@@ -405,7 +407,7 @@ async def run_retrieval(req: RetrievalRequest, user: str = Depends(authenticate)
     start_time_str = time.strftime("%H:%M:%S")
     try:
         n_results = req.n_results or 9
-        max_context_blocks = req.max_context_blocks or 5
+        max_context_blocks = req.max_context_blocks or 3
         secret = bool(req.secret)
         allowed_subject_ids = [str(x).strip() for x in (req.allowed_subject_ids or []) if str(x).strip()]
         allowed_tenant_ids = [str(x).strip() for x in (req.allowed_tenant_ids or []) if str(x).strip()]
