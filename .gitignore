@@ -28,3 +28,12 @@ storage/vector_db_bench*/**
 # Ignoreeri venv kataloogi
 .venv/
 # *.sqlite3
+
+# Oracle wallet / credentials
+oracle_wallet/
+wallet/
+*.sso
+*.p12
+*.jks
+tnsnames.ora
+sqlnet.ora

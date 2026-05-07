@@ -21,6 +21,7 @@ DEFAULT_GUARD = "gemma2:2b"
 DEFAULT_MAIN = "llama3:8b"
 DEFAULT_NORMALIZER = "alarjoeste/estonian-normalizer"
 WORKSPACE_DIR = os.getenv("WORKSPACE_DIR", "/workspace")
+UI_DB_BACKEND = "oracle" if logic_core.ORACLE_ENABLED else "sqlite"
 total_cores = os.cpu_count() or 1
 
 
@@ -96,6 +97,7 @@ def fetch_retrieval_context_via_api(
     allowed_tenant_ids=None,
     allow_all_subjects=False,
     allow_personal_data=False,
+    db_backend="sqlite",
 ):
     """Toob RAG konteksti REST API /retrieval endpointist."""
     try:
@@ -110,6 +112,7 @@ def fetch_retrieval_context_via_api(
             "allowed_tenant_ids": allowed_tenant_ids or [],
             "allow_all_subjects": bool(allow_all_subjects),
             "allow_personal_data": bool(allow_personal_data),
+            "db_backend": db_backend,
         }).encode("utf-8")
         req = urllib.request.Request(
             f"{API_BASE_URL}/retrieval",
@@ -588,6 +591,7 @@ with st.sidebar:
     st.subheader("Serveri sätted")
     st.caption(f"Build aeg: {build_time}")
     st.caption(f"Git haru: {build_branch}")
+    st.caption(f"Baas: {logic_core.get_backend_display_name(UI_DB_BACKEND)}")
     selected_threads = st.number_input(
         "Lõimi (threads):",
         1,
@@ -828,6 +832,8 @@ if st.session_state.processing and st.session_state.current_query:
 
     log_data = {
         "timestamp": logic_core.get_ee_time().strftime("%Y-%m-%d %H:%M:%S"),
+        "db_backend": UI_DB_BACKEND,
+        "db_backend_display": logic_core.get_backend_display_name(UI_DB_BACKEND),
         "user_input": u_input,
         "secret": secret_allowed,
         "allow_all_subjects": allow_all_subjects,
@@ -928,6 +934,7 @@ if st.session_state.processing and st.session_state.current_query:
                 allowed_tenant_ids=allowed_tenant_ids,
                 allow_all_subjects=allow_all_subjects,
                 allow_personal_data=allow_personal_data,
+                db_backend=UI_DB_BACKEND,
             )
             if retrieval_error:
                 raise RuntimeError(f"Retrieval API viga: {retrieval_error}")
@@ -937,6 +944,7 @@ if st.session_state.processing and st.session_state.current_query:
 
             log_data["steps"]["context_fetch"] = {
                 "found": context_found,
+                "db_backend": UI_DB_BACKEND,
                 "secret": secret_allowed,
                 "allow_all_subjects": allow_all_subjects,
                 "allow_personal_data": allow_personal_data,

@@ -16,12 +16,16 @@ services:
     build: ./logic
     container_name: logic-app
     working_dir: /app
+    env_file:
+      - .env
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
       - BUILD_TIME=${BUILD_TIME:-teadmata}
       - BUILD_BRANCH=${BUILD_BRANCH:-teadmata}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - WORKSPACE_DIR=/workspace
+      - ORACLE_CONFIG_DIR=/oracle_wallet
+      - ORACLE_WALLET_LOCATION=/oracle_wallet
     # Käivitame Streamlit rakenduse
     command: >
       streamlit run main.py 
@@ -38,25 +42,31 @@ services:
       - ./logic:/app
       - ./data_pipeline:/app/data_pipeline
       - ./storage:/app/storage
+      - ${HOME}/Oracle/Wallet_WOQC8AR450A6CUM0:/oracle_wallet:ro
       # Read-only kogu repo mount ainult git-meta ja debugi jaoks.
       - ./:/workspace:ro
-    restart: always  
+    restart: always
 
   api:
     build: ./logic
     container_name: logic-api
     working_dir: /app
+    env_file:
+      - .env
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
       - BUILD_TIME=${BUILD_TIME:-teadmata}
       - BUILD_BRANCH=${BUILD_BRANCH:-teadmata}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - WORKSPACE_DIR=/workspace
+      - ORACLE_CONFIG_DIR=/oracle_wallet
+      - ORACLE_WALLET_LOCATION=/oracle_wallet
     command: uvicorn api:app --host 0.0.0.0 --port 8000
     volumes:
       - ./logic:/app
       - ./storage:/app/storage
       - ./testing:/testing
+      - ${HOME}/Oracle/Wallet_WOQC8AR450A6CUM0:/oracle_wallet:ro
       - ./:/workspace:ro
     ports:
       - "8000:8000"
@@ -64,26 +74,30 @@ services:
       - ollama
     restart: always
 
-
   test-app:
     build: ./logic
     container_name: test-app
     working_dir: /app
+    env_file:
+      - .env
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
       - BUILD_TIME=${BUILD_TIME:-teadmata}
       - BUILD_BRANCH=${BUILD_BRANCH:-teadmata}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - ORACLE_CONFIG_DIR=/oracle_wallet
+      - ORACLE_WALLET_LOCATION=/oracle_wallet
     # See konteiner ootab käsku (manual trigger) või käivitab konkreetse testi
     command: tail -f /dev/null
     depends_on:
       - ollama
     volumes:
       - ./logic:/app
-      - ./testing:/testing  # <--- SEE RIDA ÜHENDAB TESTID
+      - ./testing:/testing
       - ./storage:/app/storage
+      - ${HOME}/Oracle/Wallet_WOQC8AR450A6CUM0:/oracle_wallet:ro
       - ./:/workspace:ro
-    restart: always  
+    restart: always
 
 volumes:
   ollama_data:

@@ -3,10 +3,15 @@ import requests
 import json
 import re
 import unicodedata
+from typing import Optional
 from datetime import datetime
 from zoneinfo import ZoneInfo
 import chromadb
 from chromadb.utils import embedding_functions
+try:
+    import oracledb
+except Exception:
+    oracledb = None
 
 # --- KONFIGURATSIOON ---
 # Võtame URL-id keskkonnamuutujatest (kooskõlas docker-compose'iga)
@@ -17,6 +22,13 @@ GEMINI_BASE_URL = os.getenv("GEMINI_BASE_URL", "https://generativelanguage.googl
 # Täpne path vastavalt docker-compose volume'ile
 CHROMA_DB_PATH = "/app/storage/vector_db"
 PROMPTS_FILE = "/app/prompts.json"
+ORACLE_ENABLED = str(os.getenv("ORACLE_ENABLED", "no")).strip().lower() in {"1", "true", "yes", "on"}
+ORACLE_DSN = os.getenv("ORACLE_DSN", "").strip()
+ORACLE_USER = os.getenv("ORACLE_USER", "").strip()
+ORACLE_PASSWORD = os.getenv("ORACLE_PASSWORD", "").strip()
+ORACLE_CONFIG_DIR = os.path.expanduser(os.getenv("ORACLE_CONFIG_DIR", "").strip())
+ORACLE_WALLET_LOCATION = os.path.expanduser(os.getenv("ORACLE_WALLET_LOCATION", "").strip())
+ORACLE_WALLET_PASSWORD = os.getenv("ORACLE_WALLET_PASSWORD", "").strip()
 
 # --- ANDMEBAASI SEADISTAMINE ---
 # KRIITILINE: Sünkroonis sinu viimase 'bge-m3' ingestiga
@@ -33,6 +45,34 @@ collection = client.get_or_create_collection(
     name="procurements", 
     embedding_function=embedding_func
 )
+
+
+def resolve_db_backend(requested_backend: Optional[str] = None, default_backend: str = "sqlite"):
+    value = str(requested_backend or "").strip().lower()
+    if value in {"sqlite", "oracle"}:
+        return value
+    if value == "auto":
+        return "oracle" if ORACLE_ENABLED else "sqlite"
+    return default_backend
+
+
+def get_backend_display_name(db_backend: str):
+    return "Oracle" if str(db_backend).lower() == "oracle" else "sqlite/chroma"
+
+
+def _oracle_connect():
+    if oracledb is None:
+        raise RuntimeError("Oracle backend requested but python-oracledb is not installed.")
+    if not ORACLE_DSN or not ORACLE_USER or not ORACLE_PASSWORD:
+        raise RuntimeError("Oracle backend requested but ORACLE_DSN/ORACLE_USER/ORACLE_PASSWORD are missing.")
+    kwargs = {"user": ORACLE_USER, "password": ORACLE_PASSWORD, "dsn": ORACLE_DSN}
+    if ORACLE_CONFIG_DIR:
+        kwargs["config_dir"] = ORACLE_CONFIG_DIR
+    if ORACLE_WALLET_LOCATION:
+        kwargs["wallet_location"] = ORACLE_WALLET_LOCATION
+    if ORACLE_WALLET_PASSWORD:
+        kwargs["wallet_password"] = ORACLE_WALLET_PASSWORD
+    return oracledb.connect(**kwargs)
 
 # --- PROMPTIDE LAADIMINE ---
 def load_prompts():
@@ -388,7 +428,8 @@ def format_debug_candidates(
         candidates.append(item)
     return candidates
 
-def get_context(
+
+def get_context_oracle(
     query,
     n_results=5,
     max_context_blocks=3,
@@ -400,11 +441,227 @@ def get_context(
     allow_personal_data=False,
     original_query=None,
 ):
+    try:
+        query_text = str(query or "").strip()
+        if not query_text:
+            if return_debug:
+                return "", {"fetch_k": 0, "candidates": []}
+            return ""
+
+        query_vec = embedding_func([query_text])[0]
+        vec_json = json.dumps(query_vec.tolist() if hasattr(query_vec, "tolist") else query_vec, separators=(",", ":"))
+        fetch_k = max(int(n_results or 5), int(max_context_blocks or 3), 5) * 4
+
+        sql = """
+            SELECT source_key, content, metadata_json, dist
+            FROM (
+                SELECT
+                    s.source_key AS source_key,
+                    c.content AS content,
+                    c.metadata_json AS metadata_json,
+                    VECTOR_DISTANCE(e.embedding, TO_VECTOR(:vec_json), COSINE) AS dist
+                FROM rag_embeddings e
+                JOIN rag_chunks c ON c.chunk_id = e.chunk_id
+                JOIN rag_sources s ON s.source_id = c.source_id
+                WHERE e.embedding_model = :embedding_model
+                ORDER BY dist
+            )
+            WHERE ROWNUM <= :fetch_k
+        """
+
+        rows = []
+        with _oracle_connect() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                sql,
+                {
+                    "vec_json": vec_json,
+                    "embedding_model": EMBEDDING_MODEL,
+                    "fetch_k": int(fetch_k),
+                },
+            )
+            raw_rows = cur.fetchall() or []
+            for row in raw_rows:
+                source_key = str(row[0] or "RAG")
+                raw_doc = row[1]
+                raw_meta = row[2]
+                dist = float(row[3]) if row[3] is not None else 1.4
+
+                doc_text = raw_doc.read() if hasattr(raw_doc, "read") else str(raw_doc or "")
+                meta_text = raw_meta.read() if hasattr(raw_meta, "read") else str(raw_meta or "{}")
+                rows.append((source_key, doc_text, meta_text, dist))
+
+        scoring_query = query_text.lower()
+        query_words = list(_text_words(scoring_query))
+        query_numbers = re.findall(r'\d[\d\s]*', scoring_query)
+        query_stems = {word[:5] for word in query_words if len(word) >= 6}
+        contract_intent = any(
+            token in scoring_query
+            for token in ["leping", "lepingu", "lepingud", "tasu", "töö sisu", "too sisu", "toode sisu", "subject_id"]
+        )
+
+        scored_docs = []
+        for idx, row in enumerate(rows):
+            source_key = row[0]
+            doc = row[1] or ""
+            # Normaliseeri levinud mojibake variandid, et §-põhised kontrollid töötaksid.
+            doc = (
+                doc.replace("Ā§", "§")
+                .replace("Â§", "§")
+                .replace("ÃÂ§", "§")
+            )
+            meta_raw = row[2]
+            dist = row[3]
+            try:
+                raw_meta_text = meta_raw or "{}"
+                if not isinstance(raw_meta_text, str):
+                    raw_meta_text = str(raw_meta_text)
+                meta = json.loads(raw_meta_text)
+            except Exception:
+                meta = {}
+            if not isinstance(meta, dict):
+                meta = {}
+            v_score = max(0, 1.4 - dist)
+            k_score = 0.0
+            doc_lower = doc.lower()
+            display_name = str(meta.get("display_name", "")).lower()
+            para_title = str(meta.get("paragraph_title", "")).lower()
+            section_title = str(meta.get("section_title", "")).lower()
+            chunk_type = str(meta.get("chunk_type", "")).lower()
+
+            title_text = f"{display_name} {para_title} {section_title}".strip()
+            title_words = set(re.findall(r'\w+', title_text))
+            title_stems = {word[:5] for word in title_words if len(word) >= 6}
+            doc_words = set(re.findall(r'\w+', doc_lower))
+            doc_stems = {word[:5] for word in doc_words if len(word) >= 6}
+
+            for word in query_words:
+                if len(word) > 4 and word in doc_lower:
+                    k_score += 0.4
+                if len(word) > 4 and word in para_title:
+                    k_score += 0.45
+                if len(word) > 4 and word in section_title:
+                    k_score += 0.4
+                if len(word) > 2 and word in display_name:
+                    k_score += 0.25
+
+            for number in query_numbers:
+                normalized_number = re.sub(r"\s+", "", number)
+                if normalized_number and normalized_number in re.sub(r"\s+", "", doc_lower):
+                    k_score += 0.6
+
+            shared_title_stems = query_stems & title_stems
+            shared_doc_stems = query_stems & doc_stems
+            k_score += 0.18 * len(shared_doc_stems)
+            k_score += 0.3 * len(shared_title_stems)
+
+            if chunk_type == "subsection":
+                k_score += 0.3
+            elif chunk_type == "section":
+                k_score += 0.15
+            elif chunk_type == "point":
+                k_score -= 0.05
+
+            score = v_score + k_score
+            if contract_intent and is_contract_metadata(meta):
+                score += 0.65 + _contract_section_intent_boost(meta, query_words)
+
+            family_key = (
+                str(meta.get("law", "")),
+                str(meta.get("section", "")),
+                str(meta.get("subsection", "")),
+                str(meta.get("section_index", "")),
+                str(idx),
+            )
+            scored_docs.append((score, source_key, doc, family_key, meta))
+
+        scored_docs.sort(key=lambda x: x[0], reverse=True)
+        secret_allowed = bool(secret)
+        limit = max(1, int(max_context_blocks or 3))
+
+        formatted_results = []
+        selected_indexes = set()
+        seen_families = set()
+        for selected_index, (sc, source, doc, family_key, meta) in enumerate(scored_docs):
+            if get_candidate_filter_reason(
+                meta,
+                secret_allowed=secret_allowed,
+                allowed_subject_ids=allowed_subject_ids,
+                allowed_tenant_ids=allowed_tenant_ids,
+                allow_all_subjects=allow_all_subjects,
+            ):
+                continue
+            if family_key in seen_families:
+                continue
+            seen_families.add(family_key)
+            selected_indexes.add(selected_index)
+            visible_doc = doc if allow_personal_data else mask_personal_codes_in_text(doc)
+            formatted_results.append(f"--- ALLIKAS: {source} ---\n{visible_doc}")
+            if len(formatted_results) >= limit:
+                break
+
+        context = "\n\n".join(formatted_results)
+        if return_debug:
+            return context, {
+                "fetch_k": fetch_k,
+                "query_texts": [query_text] + ([str(original_query).strip()] if str(original_query or "").strip() else []),
+                "target_contract_ids": [],
+                "contract_intent": bool(contract_intent),
+                "contract_probe_added": False,
+                "secret": secret_allowed,
+                "allowed_subject_ids": list(_normal_id_set(allowed_subject_ids)),
+                "allowed_tenant_ids": list(_normal_id_set(allowed_tenant_ids)),
+                "allow_all_subjects": bool(allow_all_subjects),
+                "allow_personal_data": bool(allow_personal_data),
+                "candidates": format_debug_candidates(
+                    scored_docs,
+                    selected_indexes,
+                    secret_allowed,
+                    allowed_subject_ids=allowed_subject_ids,
+                    allowed_tenant_ids=allowed_tenant_ids,
+                    allow_all_subjects=allow_all_subjects,
+                    allow_personal_data=allow_personal_data,
+                ),
+            }
+        return context
+    except Exception as e:
+        print(f"VIGA Oracle konteksti loomisel: {e}")
+        if return_debug:
+            return "", {"error": str(e), "fetch_k": None, "candidates": []}
+        return ""
+
+def get_context(
+    query,
+    n_results=5,
+    max_context_blocks=3,
+    return_debug=False,
+    secret=False,
+    allowed_subject_ids=None,
+    allowed_tenant_ids=None,
+    allow_all_subjects=False,
+    allow_personal_data=False,
+    original_query=None,
+    db_backend="sqlite",
+):
     """
     Teostab RAG-otsingu koos hübriidse skoorimisega (Vektor + Märksõnad).
     Optimeeritud bge-m3 distantsidele.
     """
     try:
+        selected_backend = resolve_db_backend(db_backend, default_backend="sqlite")
+        if selected_backend == "oracle":
+            return get_context_oracle(
+                query,
+                n_results=n_results,
+                max_context_blocks=max_context_blocks,
+                return_debug=return_debug,
+                secret=secret,
+                allowed_subject_ids=allowed_subject_ids,
+                allowed_tenant_ids=allowed_tenant_ids,
+                allow_all_subjects=allow_all_subjects,
+                allow_personal_data=allow_personal_data,
+                original_query=original_query,
+            )
         # Küsime vektorbaasist rohkem kandidaate kui lõppväljundisse vaja,
         # et Pythonis tehtav ümberreastamine ja dedupe saaks päriselt mõjuda.
         fetch_k = max(int(n_results or 5), int(max_context_blocks or 3), 5) * 4

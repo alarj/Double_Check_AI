@@ -135,6 +135,7 @@ class RetrievalRequest(BaseModel):
     allowed_tenant_ids: List[str] = Field(default_factory=list)
     allow_all_subjects: Optional[bool] = False
     allow_personal_data: Optional[bool] = False
+    db_backend: Optional[Literal["sqlite", "oracle", "auto"]] = "sqlite"
 
 class PostCheckRequest(BaseModel):
     ai_response: str
@@ -164,7 +165,9 @@ def log_api_call(endpoint: str, status_code: int, duration: float, user: str, ex
         "endpoint": endpoint,
         "user": user,
         "status": status_code,
-        "duration_sec": round(duration, 3)
+        "duration_sec": round(duration, 3),
+        "db_backend_default": "sqlite",
+        "oracle_enabled_env": bool(logic_core.ORACLE_ENABLED),
     }
     if extra_data:
         log_entry.update(extra_data)
@@ -405,6 +408,7 @@ async def run_retrieval(req: RetrievalRequest, user: str = Depends(authenticate)
     """
     start_time = time.time()
     start_time_str = time.strftime("%H:%M:%S")
+    selected_backend = logic_core.resolve_db_backend(req.db_backend, default_backend="sqlite")
     try:
         n_results = req.n_results or 9
         max_context_blocks = req.max_context_blocks or 3
@@ -424,6 +428,7 @@ async def run_retrieval(req: RetrievalRequest, user: str = Depends(authenticate)
             allow_all_subjects=allow_all_subjects,
             allow_personal_data=allow_personal_data,
             original_query=req.original_query,
+            db_backend=selected_backend,
         )
         duration = time.time() - start_time
         blocks = [f"--- ALLIKAS:{block}" for block in context.split("--- ALLIKAS:") if block.strip()]
@@ -438,12 +443,15 @@ async def run_retrieval(req: RetrievalRequest, user: str = Depends(authenticate)
             "allowed_tenant_ids": allowed_tenant_ids,
             "allow_all_subjects": allow_all_subjects,
             "allow_personal_data": allow_personal_data,
+            "db_backend": selected_backend,
+            "db_backend_display": logic_core.get_backend_display_name(selected_backend),
             "start_time": start_time_str,
             "found": bool(context.strip()),
             "context": context,
             "sources_returned": [block[:100] + "..." for block in blocks],
             "sources_returned_raw": retrieval_debug.get("candidates", []),
             "retrieval_debug": {
+                "error": retrieval_debug.get("error", ""),
                 "fetch_k": retrieval_debug.get("fetch_k"),
                 "query_texts": retrieval_debug.get("query_texts", []),
                 "target_contract_ids": retrieval_debug.get("target_contract_ids", []),
@@ -475,7 +483,7 @@ async def run_retrieval(req: RetrievalRequest, user: str = Depends(authenticate)
         log_api_call("/retrieval", 200, duration, user, response_data)
         return response_data
     except Exception as e:
-        log_api_call("/retrieval", 500, 0, user, {"query": req.query, "error": str(e)})
+        log_api_call("/retrieval", 500, 0, user, {"query": req.query, "db_backend": selected_backend, "error": str(e)})
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -779,6 +787,7 @@ async def post_check(req: PostCheckRequest, user: str = Depends(authenticate)):
     """
     start_time = time.time()
     start_time_str = time.strftime("%H:%M:%S")
+    selected_backend = logic_core.resolve_db_backend(req.db_backend, default_backend="sqlite")
     try:
         if not req.original_user_input:
             raise HTTPException(status_code=422, detail="Missing required field: original_user_input")

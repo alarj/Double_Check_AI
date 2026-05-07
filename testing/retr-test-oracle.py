@@ -17,7 +17,7 @@ LOG_FILE = "/testing/retr-test-log.json"
 SECTION_MARKER = "\u00a7"
 DEFAULT_N_RESULTS = 5
 DEFAULT_MAX_CONTEXT_BLOCKS = 5
-DB_BACKEND = "sqlite"
+DB_BACKEND = "oracle"
 
 
 def ee_now_str() -> str:
@@ -74,7 +74,7 @@ def run_retrieval_benchmark():
     # Filtreerime välja ainult need küsimused, millel on olemas expected_section.
     test_cases = [c for c in dataset if c.get("expected_section") is not None]
 
-    print(f"ALUSTAN RETRIEVAL BENCHMARKINGUT ({len(test_cases)} asjakohast küsimust)")
+    print(f"ALUSTAN RETRIEVAL BENCHMARKINGUT ({len(test_cases)} asjakohast küsimust) | db_backend={DB_BACKEND}")
     print("-" * 75)
 
     full_log = []
