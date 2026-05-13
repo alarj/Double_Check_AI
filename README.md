@@ -4,6 +4,9 @@ Tegemist on TalTech AI mikrokraadi kursusetööga.
 Võid vabalt lugeda, kopeerida, endale paigaldada jne. 
 Mõnes oma kirjalikus töös või ettekandes kasutamisel on viisakas viidata :-)
 
+## Litsents
+See projekt on litsentseeritud MIT litsentsi alusel - vaata [LICENSE](LICENSE) faili üksikasjade saamiseks.
+
 # Double_Check_AI: AI Guardrail Prototüüp
 
 See projekt demonstreerib mitmeastmelist AI turvakihti (Guardrail), mis kasutab mitut erinevat mudelit, et tagada siseandmete turvalisus.
