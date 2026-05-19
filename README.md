@@ -4,6 +4,10 @@ Tegemist on TalTech AI mikrokraadi kursusetööga.
 Võid vabalt lugeda, kopeerida, endale paigaldada jne. 
 Mõnes oma kirjalikus töös või ettekandes kasutamisel on viisakas viidata :-)
 
+Esialgne üleasndepüstitus on [Double-Check AI initial task.pdf](siin).
+
+Projekti äriline kirjeldus asub dokumendis [Kontrollitud_ja_turvaline_AI_sisuline_aruanne.md](Kontrollitud_ja_turvaline_AI_sisuline_aruanne.md)
+
 ## Litsents
 See projekt on litsentseeritud MIT litsentsi alusel - vaata [LICENSE](LICENSE) faili üksikasjade saamiseks.
 
